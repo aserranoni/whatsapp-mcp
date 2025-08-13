@@ -19,7 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": false,
-    "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": false,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,

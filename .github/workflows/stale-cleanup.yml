@@ -1,0 +1,322 @@
+name: 🧹 Stale Issues & PRs Cleanup
+
+on:
+  schedule:
+    # Run twice weekly - Tuesday and Friday at 02:00 UTC
+    - cron: '0 2 * * 2,5'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no actual changes)'
+        required: false
+        default: true
+        type: boolean
+      days_before_stale:
+        description: 'Days before marking as stale'
+        required: false
+        default: '21'
+        type: string
+      days_before_close:
+        description: 'Days before closing stale items'
+        required: false
+        default: '7'
+        type: string
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  cleanup-stale-issues:
+    name: 🧹 Cleanup Stale Issues
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 🧹 Handle stale issues
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Days before marking as stale
+          days-before-stale: ${{ github.event.inputs.days_before_stale || '21' }}
+
+          # Days before closing after being marked stale
+          days-before-close: ${{ github.event.inputs.days_before_close || '7' }}
+
+          # Stale issue label
+          stale-issue-label: 'status: stale'
+
+          # Issues to never mark as stale
+          exempt-issue-labels: |
+            status: pinned
+            priority: high
+            priority: critical
+            status: in-progress
+            status: under-review
+            type: enhancement
+            help wanted
+            good first issue
+
+          # Custom messages
+          stale-issue-message: |
+            ⏰ **This issue has been marked as stale**
+
+            This issue hasn't had any activity for ${{ github.event.inputs.days_before_stale || '21' }} days and will be automatically closed in ${{ github.event.inputs.days_before_close || '7' }} days if no further activity occurs.
+
+            **To keep this issue active:**
+            - 💬 Add a comment with updates, progress, or questions
+            - 🏷️ Add relevant labels or assign someone
+            - 🔗 Reference it in related PRs or discussions
+
+            **If this issue is still relevant:**
+            - Please comment to confirm it's still needed
+            - Provide any additional context or updates
+            - Update the description if requirements have changed
+
+            The stale label will be removed automatically when there's new activity. Thank you for your patience! 🙏
+
+          close-issue-message: |
+            🔒 **Auto-closing stale issue**
+
+            This issue has been automatically closed due to inactivity for ${{ github.event.inputs.days_before_stale || '21' }} + ${{ github.event.inputs.days_before_close || '7' }} days.
+
+            **Why was this closed?**
+            - No activity after being marked as stale
+            - Assumed to be resolved, outdated, or no longer relevant
+
+            **Need to reopen this?**
+            - 💬 Comment on this issue to reopen it automatically
+            - 🆕 Create a new issue if this problem persists
+            - 🔗 Reference this issue (#${{ github.event.issue.number }}) for context
+
+            **Was this closed by mistake?**
+            Simply comment and we'll gladly reopen it! We appreciate your understanding. 🙏
+
+          # Operations per run (to avoid rate limiting)
+          operations-per-run: 50
+
+          # Remove stale label on new activity
+          remove-stale-when-updated: true
+
+          # Don't close issues, just mark as stale initially
+
+          # Enable debug logging
+          debug-only: ${{ github.event.inputs.dry_run == 'true' }}
+
+  cleanup-stale-prs:
+    name: 🧹 Cleanup Stale Pull Requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 🧹 Handle stale pull requests
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Only handle PRs, not issues
+          only-labels: ''
+          only-pr-labels: ''
+
+          # Days before marking PRs as stale (longer than issues)
+          days-before-stale: 14
+
+          # Days before closing stale PRs (longer grace period)
+          days-before-pr-close: 14
+
+          # PR-specific labels
+          stale-pr-label: 'status: stale'
+
+          # PRs to never mark as stale
+          exempt-pr-labels: |
+            status: work-in-progress
+            status: blocked
+            priority: high
+            priority: critical
+            status: waiting-for-review
+            dependencies
+            breaking-change
+            status: draft
+
+          # Custom PR messages
+          stale-pr-message: |
+            ⏰ **This pull request has been marked as stale**
+
+            This PR hasn't had any activity for 14 days and will be automatically closed in 14 days if no further activity occurs.
+
+            **To keep this PR active:**
+            - 💬 Comment with an update on progress or blockers
+            - 📝 Update the PR description or add more commits
+            - 🏷️ Add relevant labels or request reviews
+            - 🔄 Resolve any merge conflicts
+
+            **If this PR is ready for review:**
+            - Mark it as ready for review (if it's a draft)
+            - Request specific reviewers
+            - Ensure CI checks are passing
+
+            **If this PR is blocked:**
+            - Add the `status: blocked` label
+            - Explain the blocker in a comment
+
+            The stale label will be removed automatically when there's new activity. Thanks for contributing! 🚀
+
+          close-pr-message: |
+            🔒 **Auto-closing stale pull request**
+
+            This PR has been automatically closed due to inactivity for 28 days total.
+
+            **Why was this closed?**
+            - No activity after being marked as stale
+            - Assumed to be abandoned or outdated
+
+            **Want to continue this work?**
+            - 💬 Comment to reopen (if you're the author)
+            - 🔄 Rebase on the latest main branch
+            - 🆕 Create a new PR with fresh commits
+            - 🔗 Reference this PR (#${{ github.event.pull_request.number }}) for context
+
+            **Was this closed by mistake?**
+            Please comment and we'll reopen it! We appreciate your contributions. 🙏
+
+          # Operations per run
+          operations-per-run: 30
+
+          # Remove stale label on new activity
+          remove-stale-when-updated: true
+
+          # Enable debug logging
+          debug-only: ${{ github.event.inputs.dry_run == 'true' }}
+
+  cleanup-report:
+    name: 📊 Cleanup Report
+    runs-on: ubuntu-latest
+    needs: [cleanup-stale-issues, cleanup-stale-prs]
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: 📊 Generate cleanup summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const isDryRun = ${{ github.event.inputs.dry_run == 'true' }};
+            const daysBeforeStale = ${{ github.event.inputs.days_before_stale || '21' }};
+            const daysBeforeClose = ${{ github.event.inputs.days_before_close || '7' }};
+
+            // Get current stale issues and PRs
+            const { data: staleIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'status: stale',
+              per_page: 100
+            });
+
+            const issues = staleIssues.filter(item => !item.pull_request);
+            const prs = staleIssues.filter(item => item.pull_request);
+
+            // Get recently closed items (last 7 days) that were auto-closed
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            const { data: recentlyClosed } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              since: sevenDaysAgo.toISOString(),
+              per_page: 100
+            });
+
+            const autoClosedThisWeek = recentlyClosed.filter(item => {
+              const timeline = item.timeline_url;
+              // This is a simplified check - in a real implementation,
+              // you might want to check the actual timeline events
+              return item.state_reason === 'not_planned';
+            });
+
+            // Generate summary
+            const summary = "## 🧹 Stale Cleanup Summary\n\n" +
+              "### 📊 Current Status\n" +
+              "- **Stale Issues**: " + issues.length + "\n" +
+              "- **Stale PRs**: " + prs.length + "\n" +
+              "- **Auto-closed This Week**: " + autoClosedThisWeek.length + "\n\n" +
+              "### ⚙️ Configuration\n" +
+              "- **Mark as Stale After**: " + daysBeforeStale + " days\n" +
+              "- **Close After Stale For**: " + daysBeforeClose + " days\n" +
+              "- **Total Days Before Auto-close**: " + (parseInt(daysBeforeStale) + parseInt(daysBeforeClose)) + " days\n" +
+              "- **Dry Run Mode**: " + (isDryRun ? "✅ Yes (no changes made)" : "❌ No (changes applied)") + "\n\n" +
+              "### 🎯 Next Actions\n" +
+              (issues.length > 10 ? "⚠️ High number of stale issues - consider reviewing project priorities" : "✅ Stale issue count is manageable") + "\n" +
+              (prs.length > 5 ? "⚠️ Several stale PRs - consider reaching out to contributors" : "✅ Stale PR count is reasonable") + "\n\n" +
+              "### 🔗 Useful Links\n" +
+              "- [View all stale issues](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/issues?q=is%3Aopen+label%3A%22status%3A+stale%22)\n" +
+              "- [View all stale PRs](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/pulls?q=is%3Aopen+label%3A%22status%3A+stale%22)\n" +
+              "- [Recently closed items](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/issues?q=is%3Aclosed+closed%3A%3E" + sevenDaysAgo.toISOString().split('T')[0] + ")\n\n" +
+              "---\n" +
+              "📅 Generated: " + new Date().toUTCString() + "\n" +
+              "🤖 Run ID: ${{ github.run_id }}";
+
+            console.log(summary);
+
+            // Add to job summary
+            core.summary.addRaw(summary);
+            await core.summary.write();
+
+  reopen-on-comment:
+    name: 🔄 Reopen on Comment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment' && github.event.action == 'created'
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: 🔄 Reopen if commented on closed stale item
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const comment = context.payload.comment;
+            const commenter = comment.user.login;
+
+            // Only reopen if the issue/PR was closed and has stale label
+            if (issue.state === 'closed' &&
+                issue.labels.some(label => label.name === 'status: stale')) {
+
+              console.log(`Reopening stale ${issue.pull_request ? 'PR' : 'issue'} #${issue.number} due to comment by ${commenter}`);
+
+              // Reopen the issue/PR
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'open'
+              });
+
+              // Remove stale label
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: 'status: stale'
+                });
+              } catch (error) {
+                console.log('Stale label may have already been removed');
+              }
+
+              // Add a comment acknowledging the reopening
+              const itemType = issue.pull_request ? 'pull request' : 'issue';
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: "🔄 **Automatically reopened**\n\n" +
+                  "This " + itemType + " has been reopened because @" + commenter + " added a comment.\n\n" +
+                  "The `status: stale` label has been removed. Thank you for the follow-up! 🙏"
+              });
+            }

@@ -1,0 +1,352 @@
+name: 🔒 Security Checks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run security checks daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - dependencies
+          - secrets
+          - container
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  dependency-scan:
+    name: 🔍 Dependency Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🔒 npm audit
+        run: |
+          echo "🔍 Running npm audit..."
+          npm audit --audit-level moderate || AUDIT_EXIT_CODE=$?
+
+          if [[ $AUDIT_EXIT_CODE -ne 0 ]]; then
+            echo "⚠️ npm audit found security vulnerabilities"
+            npm audit --audit-level moderate --json > audit-results.json
+
+            echo "📊 Vulnerability summary:"
+            jq '.metadata.vulnerabilities' audit-results.json
+
+            echo "🔧 Attempting automatic fixes..."
+            npm audit fix --dry-run
+
+            if [[ $AUDIT_EXIT_CODE -gt 4 ]]; then
+              echo "❌ Critical vulnerabilities found, failing build"
+              exit 1
+            else
+              echo "⚠️ Non-critical vulnerabilities found, continuing"
+            fi
+          else
+            echo "✅ No vulnerabilities found"
+          fi
+
+      - name: 🐍 Snyk vulnerability scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --json > snyk-results.json
+
+      - name: 📤 Upload Snyk results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-security-scan
+          path: snyk-results.json
+          retention-days: 30
+
+  secret-scan:
+    name: 🔐 Secret Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔐 TruffleHog OSS secret scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: 🔍 Custom secret patterns
+        run: |
+          echo "🔍 Scanning for custom secret patterns..."
+
+          # Check for common secret patterns
+          SECRETS_FOUND=false
+
+          # API Keys
+          if grep -r -i "api[_-]key.*=" . --exclude-dir=node_modules \
+             --exclude-dir=.git --exclude="*.md" | grep -v "your-api-key" | grep -v "API_KEY"; then
+            echo "⚠️ Potential API key found"
+            SECRETS_FOUND=true
+          fi
+
+          # Tokens
+          if grep -r -i "token.*=" . --exclude-dir=node_modules \
+             --exclude-dir=.git --exclude="*.md" | grep -v "your-token" | grep -v "TOKEN"; then
+            echo "⚠️ Potential token found"
+            SECRETS_FOUND=true
+          fi
+
+          # Private keys
+          if grep -r "BEGIN.*PRIVATE KEY" . --exclude-dir=node_modules --exclude-dir=.git; then
+            echo "⚠️ Private key found"
+            SECRETS_FOUND=true
+          fi
+
+          # Passwords in code
+          if grep -r -i "password.*=" . --exclude-dir=node_modules \
+             --exclude-dir=.git --exclude="*.md" | grep -v "your-password" | grep -v "PASSWORD"; then
+            echo "⚠️ Potential password found"
+            SECRETS_FOUND=true
+          fi
+
+          if [[ "$SECRETS_FOUND" == "true" ]]; then
+            echo "❌ Secrets detected! Please review and remove them."
+            exit 1
+          else
+            echo "✅ No secrets detected"
+          fi
+
+  codeql:
+    name: 🔬 CodeQL Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['typescript']
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔬 Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: +security-and-quality
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🏗️ Build project
+        run: npm run build
+
+      - name: 🔬 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  semgrep:
+    name: 🎯 Semgrep Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🎯 Semgrep scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/nodejs
+            p/typescript
+            p/owasp-top-ten
+            p/secrets
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  license-check:
+    name: 📜 License Compliance Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 📜 Check licenses
+        run: |
+          echo "📜 Checking dependency licenses..."
+
+          # Install license checker
+          npm install -g license-checker
+
+          # Generate license report
+          license-checker --json > licenses.json
+
+          # Check for problematic licenses
+          PROBLEMATIC_LICENSES=("GPL" "AGPL" "LGPL" "MPL")
+
+          echo "🔍 Scanning for problematic licenses..."
+          for license in "${PROBLEMATIC_LICENSES[@]}"; do
+            if grep -i "$license" licenses.json; then
+              echo "⚠️ Found potentially problematic license: $license"
+              echo "📄 Please review license compatibility"
+            fi
+          done
+
+          echo "✅ License check completed"
+
+      - name: 📤 Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: licenses.json
+          retention-days: 30
+
+  container-scan:
+    name: 🐳 Container Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event.inputs.scan_type == 'container' || github.event.inputs.scan_type == 'full'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Build Docker image (for testing)
+        run: |
+          cat > Dockerfile.security-test << 'EOF'
+          FROM node:18-alpine
+          WORKDIR /app
+          COPY package*.json ./
+          RUN npm ci --only=production
+          COPY dist/ ./dist/
+          EXPOSE 3000
+          CMD ["node", "dist/index.js"]
+          EOF
+
+          echo "📦 Installing dependencies for image..."
+          npm ci
+          npm run build
+
+          echo "🐳 Building test image..."
+          docker build -f Dockerfile.security-test -t whatsapp-mcp-server:security-test .
+
+      - name: 🔍 Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'whatsapp-mcp-server:security-test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: 📤 Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  security-summary:
+    name: 📊 Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, secret-scan, codeql, semgrep, license-check]
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: 📊 Generate security summary
+        run: |
+          echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check job results
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Scan | ${{ needs.dependency-scan.result == 'success' && \
+            '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scan | ${{ needs.secret-scan.result == 'success' && \
+            '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL Analysis | ${{ needs.codeql.result == 'success' && \
+            '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep Scan | ${{ needs.semgrep.result == 'success' && \
+            '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License Check | ${{ needs.license-check.result == 'success' && \
+            '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Overall status
+          if [[ "${{ needs.dependency-scan.result }}" == "success" &&
+                "${{ needs.secret-scan.result }}" == "success" &&
+                "${{ needs.codeql.result }}" == "success" &&
+                "${{ needs.semgrep.result }}" == "success" &&
+                "${{ needs.license-check.result }}" == "success" ]]; then
+            echo "### ✅ Overall Status: **PASSED**" >> $GITHUB_STEP_SUMMARY
+            echo "All security checks completed successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Overall Status: **FAILED**" >> $GITHUB_STEP_SUMMARY
+            echo "One or more security checks failed. Please review the results." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📅 Scan Date: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 Run Details: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> \
+            $GITHUB_STEP_SUMMARY
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
