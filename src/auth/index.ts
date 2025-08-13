@@ -11,3 +11,11 @@ export {
   type AuthStateInfo,
   type AuthStateTransition
 } from './auth-state.js';
+export {
+  AuthStrategyManager,
+  AuthStrategy,
+  SessionRestoreStrategy,
+  QrCodeStrategy,
+  type AuthenticationResult,
+  type AuthContext
+} from './auth-strategy.js';
