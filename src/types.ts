@@ -51,3 +51,6 @@ export interface McpToolResult {
   }>;
   isError?: boolean;
 }
+
+// Re-export message types for easy access
+export * from './types/messages.js';
