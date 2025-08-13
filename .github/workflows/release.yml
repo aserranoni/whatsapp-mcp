@@ -15,11 +15,11 @@ jobs:
     name: 🏷️ Validate Tag
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    
+
     outputs:
       version: ${{ steps.extract.outputs.version }}
       is-prerelease: ${{ steps.extract.outputs.prerelease }}
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
-            
+
             if [[ $VERSION == *"-"* ]]; then
               echo "prerelease=true" >> $GITHUB_OUTPUT
               echo "🏷️ Pre-release version detected: $VERSION"
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate-tag
     timeout-minutes: 15
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate-tag
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -136,7 +136,7 @@ jobs:
     needs: [validate-tag, build-and-test, security-scan]
     timeout-minutes: 10
     environment: production
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -158,7 +158,7 @@ jobs:
         run: |
           echo "📦 Package contents:"
           npm pack --dry-run
-          
+
           echo "🔍 Verifying required files..."
           test -d dist/ || (echo "❌ Missing dist directory" && exit 1)
           test -f README.md || (echo "❌ Missing README.md" && exit 1)
@@ -190,7 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate-tag, publish-npm]
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -201,10 +201,10 @@ jobs:
         id: changelog
         run: |
           VERSION="${{ needs.validate-tag.outputs.version }}"
-          
+
           # Get previous tag
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
+
           if [[ -n "$PREVIOUS_TAG" ]]; then
             echo "📝 Generating changelog since $PREVIOUS_TAG"
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD | grep -v "Merge " || echo "- Initial release")
@@ -212,35 +212,35 @@ jobs:
             echo "📝 First release - generating initial changelog"
             CHANGELOG="- Initial release"
           fi
-          
+
           # Create release notes
           cat > release_notes.md << EOF
           ## 🚀 What's New in v$VERSION
-          
+
           ### Changes
           $CHANGELOG
-          
+
           ### 📦 Installation
-          
+
           \`\`\`bash
           npm install -g whatsapp-mcp-server@$VERSION
           \`\`\`
-          
+
           ### 🔗 Links
-          
+
           - 📖 [Documentation](https://github.com/${{ github.repository }}#readme)
           - 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)
           - 💬 [Discussions](https://github.com/${{ github.repository }}/discussions)
           - 📦 [npm Package](https://www.npmjs.com/package/whatsapp-mcp-server)
-          
+
           ### ✅ Verification
-          
+
           To verify the installation:
           \`\`\`bash
           whatsapp-mcp-server --help
           \`\`\`
           EOF
-          
+
           echo "changelog-file=release_notes.md" >> $GITHUB_OUTPUT
 
       - name: 📤 Download build artifacts
@@ -268,17 +268,17 @@ jobs:
     needs: [validate-tag, create-github-release]
     timeout-minutes: 5
     if: success()
-    
+
     steps:
       - name: 📢 Notify successful release
         run: |
           VERSION="${{ needs.validate-tag.outputs.version }}"
           PRERELEASE="${{ needs.validate-tag.outputs.is-prerelease }}"
-          
+
           echo "🎉 Successfully released v$VERSION!"
           echo "📦 Package: https://www.npmjs.com/package/whatsapp-mcp-server"
           echo "🎯 Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v$VERSION"
-          
+
           if [[ "$PRERELEASE" == "true" ]]; then
             echo "⚠️ This is a pre-release version"
             echo "📦 Install with: npm install -g whatsapp-mcp-server@beta"
@@ -293,13 +293,13 @@ jobs:
     needs: [validate-tag, publish-npm]
     if: failure()
     timeout-minutes: 5
-    
+
     steps:
       - name: 🔄 Attempt npm unpublish (if possible)
         run: |
           echo "❌ Release failed, checking if rollback is possible"
           echo "🔗 Check failed job: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
+
           # Note: npm unpublish is generally not recommended and has restrictions
           # This is mainly for logging purposes
           echo "⚠️ Manual intervention may be required to handle the failed release"

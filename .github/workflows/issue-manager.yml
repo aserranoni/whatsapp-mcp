@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issues' && github.event.action == 'opened'
     timeout-minutes: 5
-    
+
     steps:
       - name: ✅ Validate issue template compliance
         uses: actions/github-script@v7
@@ -41,41 +41,41 @@ jobs:
             const issue = context.payload.issue;
             const body = issue.body || '';
             const title = issue.title;
-            
+
             console.log('🔍 Validating issue template compliance...');
-            
+
             let validationErrors = [];
             let suggestions = [];
-            
+
             // Check if using a template (has certain markers)
             const templateMarkers = [
               '## Bug Description',
-              '## Feature Summary', 
+              '## Feature Summary',
               '## Your Question',
               'Pre-flight checklist'
             ];
-            
+
             const usesTemplate = templateMarkers.some(marker => body.includes(marker));
-            
+
             if (!usesTemplate) {
               // Check for free-form issues that might need template guidance
-              if (title.toLowerCase().includes('bug') || 
-                  title.toLowerCase().includes('error') || 
+              if (title.toLowerCase().includes('bug') ||
+                  title.toLowerCase().includes('error') ||
                   title.toLowerCase().includes('issue')) {
                 suggestions.push('🐛 This looks like a bug report. Please use the bug report template for better tracking.');
-              } else if (title.toLowerCase().includes('feature') || 
-                         title.toLowerCase().includes('enhancement') || 
+              } else if (title.toLowerCase().includes('feature') ||
+                         title.toLowerCase().includes('enhancement') ||
                          title.toLowerCase().includes('request')) {
                 suggestions.push('✨ This looks like a feature request. Please use the feature request template.');
-              } else if (title.toLowerCase().includes('question') || 
-                         title.toLowerCase().includes('help') || 
+              } else if (title.toLowerCase().includes('question') ||
+                         title.toLowerCase().includes('help') ||
                          title.toLowerCase().includes('how')) {
                 suggestions.push('❓ This looks like a question. Please use the question template for faster responses.');
               }
             } else {
               console.log('✅ Issue uses a template');
             }
-            
+
             // Validate title format
             if (title.length < 10) {
               validationErrors.push('❌ Title is too short (minimum 10 characters)');
@@ -83,7 +83,7 @@ jobs:
             if (title.length > 100) {
               validationErrors.push('❌ Title is too long (maximum 100 characters)');
             }
-            
+
             // Check for empty sections in template
             if (usesTemplate) {
               const emptyPatterns = [
@@ -92,20 +92,20 @@ jobs:
                 'A brief, clear description of the feature',
                 'placeholder'
               ];
-              
-              const hasEmptyPlaceholders = emptyPatterns.some(pattern => 
+
+              const hasEmptyPlaceholders = emptyPatterns.some(pattern =>
                 body.includes(pattern)
               );
-              
+
               if (hasEmptyPlaceholders) {
                 validationErrors.push('❌ Please fill out all template sections');
               }
             }
-            
+
             // Create validation comment if needed
             if (validationErrors.length > 0 || suggestions.length > 0) {
               let comment = '## 📋 Issue Validation\n\n';
-              
+
               if (validationErrors.length > 0) {
                 comment += '### ❌ Issues Found\n';
                 validationErrors.forEach(error => {
@@ -113,7 +113,7 @@ jobs:
                 });
                 comment += '\n';
               }
-              
+
               if (suggestions.length > 0) {
                 comment += '### 💡 Suggestions\n';
                 suggestions.forEach(suggestion => {
@@ -121,21 +121,21 @@ jobs:
                 });
                 comment += '\n';
               }
-              
+
               comment += '### 🔗 Helpful Links\n';
               comment += '- [Bug Report Template](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/issues/new?template=bug_report.yml)\n';
               comment += '- [Feature Request Template](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/issues/new?template=feature_request.yml)\n';
               comment += '- [Question Template](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/issues/new?template=question.yml)\n';
               comment += '- [Documentation](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '#readme)\n\n';
               comment += '*This is an automated message. Please update your issue if needed.*';
-              
+
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
                 body: comment
               });
-              
+
               // Add needs-more-info label if validation failed
               if (validationErrors.length > 0) {
                 await github.rest.issues.addLabels({
@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issues' && github.event.action == 'opened'
     timeout-minutes: 5
-    
+
     steps:
       - name: 👋 Welcome first-time contributors
         uses: actions/github-script@v7
@@ -160,9 +160,9 @@ jobs:
           script: |
             const issue = context.payload.issue;
             const author = issue.user.login;
-            
+
             console.log(`🔍 Checking if ${author} is a first-time contributor...`);
-            
+
             // Check if this is the user's first issue
             const { data: userIssues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -170,10 +170,10 @@ jobs:
               creator: author,
               state: 'all'
             });
-            
+
             if (userIssues.length === 1) {
               console.log('👋 First-time contributor detected');
-              
+
               const welcomeMessage = "👋 **Welcome to the WhatsApp MCP Server project!**\n\n" +
                 "Thank you for opening your first issue, @" + author + "! We appreciate your interest in the project.\n\n" +
                 "### 📚 Getting Started\n" +
@@ -197,7 +197,7 @@ jobs:
                 issue_number: issue.number,
                 body: welcomeMessage
               });
-              
+
               // Add first-time contributor label
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
@@ -212,7 +212,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issues' && github.event.action == 'opened'
     timeout-minutes: 10
-    
+
     steps:
       - name: 🔍 Check for duplicate issues
         uses: actions/github-script@v7
@@ -221,9 +221,9 @@ jobs:
             const issue = context.payload.issue;
             const title = issue.title.toLowerCase();
             const body = (issue.body || '').toLowerCase();
-            
+
             console.log('🔍 Checking for potential duplicates...');
-            
+
             // Get recent issues to compare against
             const { data: recentIssues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -233,58 +233,58 @@ jobs:
               sort: 'created',
               direction: 'desc'
             });
-            
+
             const potentialDuplicates = [];
-            
+
             for (const existingIssue of recentIssues) {
               if (existingIssue.number === issue.number) continue;
-              
+
               const existingTitle = existingIssue.title.toLowerCase();
               const existingBody = (existingIssue.body || '').toLowerCase();
-              
+
               // Simple similarity check
               let similarity = 0;
-              
+
               // Title similarity (high weight)
               const titleWords = title.split(/\s+/);
               const existingTitleWords = existingTitle.split(/\s+/);
-              const commonTitleWords = titleWords.filter(word => 
+              const commonTitleWords = titleWords.filter(word =>
                 word.length > 3 && existingTitleWords.includes(word)
               );
-              
+
               if (titleWords.length > 0) {
                 similarity += (commonTitleWords.length / titleWords.length) * 0.7;
               }
-              
+
               // Body similarity (lower weight)
               if (body && existingBody) {
                 const bodyWords = body.split(/\s+/).filter(word => word.length > 4);
                 const existingBodyWords = existingBody.split(/\s+/).filter(word => word.length > 4);
-                const commonBodyWords = bodyWords.filter(word => 
+                const commonBodyWords = bodyWords.filter(word =>
                   existingBodyWords.includes(word)
                 );
-                
+
                 if (bodyWords.length > 10) {
                   similarity += (commonBodyWords.length / bodyWords.length) * 0.3;
                 }
               }
-              
+
               // Check for exact error messages
               if (body && existingBody) {
                 const errorPattern = /error[:\s]([^.\n]{10,})/gi;
                 const errors = [...body.matchAll(errorPattern)];
                 const existingErrors = [...existingBody.matchAll(errorPattern)];
-                
+
                 for (const error of errors) {
                   for (const existingError of existingErrors) {
-                    if (error[1] && existingError[1] && 
+                    if (error[1] && existingError[1] &&
                         error[1].trim() === existingError[1].trim()) {
                       similarity += 0.5;
                     }
                   }
                 }
               }
-              
+
               if (similarity > 0.6) {
                 potentialDuplicates.push({
                   issue: existingIssue,
@@ -292,34 +292,34 @@ jobs:
                 });
               }
             }
-            
+
             // Sort by similarity
             potentialDuplicates.sort((a, b) => b.similarity - a.similarity);
-            
+
             if (potentialDuplicates.length > 0) {
               console.log(`Found ${potentialDuplicates.length} potential duplicates`);
-              
+
               let comment = '🔍 **Potential Duplicate Detection**\n\n';
               comment += 'This issue might be similar to:\n\n';
-              
+
               potentialDuplicates.slice(0, 3).forEach((dup, index) => {
                 const conf = Math.round(dup.similarity * 100);
                 comment += `${index + 1}. #${dup.issue.number} - ${dup.issue.title} (${conf}% similarity)\n`;
               });
-              
+
               comment += '\n**Before proceeding:**\n';
               comment += '- Please check if any of these existing issues address your problem\n';
               comment += '- If this is indeed a duplicate, please comment on the existing issue instead\n';
               comment += '- If this is different, please add more details to help us distinguish it\n\n';
               comment += '*This is an automated check. Feel free to proceed if this is not a duplicate.*';
-              
+
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
                 body: comment
               });
-              
+
               // Add potential duplicate label for high similarity
               if (potentialDuplicates[0].similarity > 0.8) {
                 await github.rest.issues.addLabels({
@@ -336,7 +336,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'edited')
     timeout-minutes: 5
-    
+
     steps:
       - name: 🎯 Auto-assign based on expertise
         uses: actions/github-script@v7
@@ -346,9 +346,9 @@ jobs:
             const title = issue.title.toLowerCase();
             const body = (issue.body || '').toLowerCase();
             const labels = issue.labels.map(label => label.name);
-            
+
             console.log('🎯 Determining expert assignment...');
-            
+
             // Define expertise mapping
             const experts = {
               // Main maintainer gets all critical issues
@@ -361,50 +361,50 @@ jobs:
               // 'expert-username': {
               //   keywords: ['audio', 'tts', 'elevenlabs'],
               //   components: ['component: audio'],
-              //   priority: 2  
+              //   priority: 2
               // }
             };
-            
+
             let bestMatch = null;
             let maxScore = 0;
-            
+
             for (const [username, expertise] of Object.entries(experts)) {
               let score = 0;
-              
+
               // Check keywords in title and body
               expertise.keywords.forEach(keyword => {
                 if (title.includes(keyword) || body.includes(keyword)) {
                   score += 3;
                 }
               });
-              
+
               // Check component labels
               expertise.components.forEach(component => {
                 if (labels.includes(component)) {
                   score += 2;
                 }
               });
-              
+
               // Priority bonus (higher priority = higher score)
               score += (10 - expertise.priority);
-              
+
               if (score > maxScore) {
                 maxScore = score;
                 bestMatch = username;
               }
             }
-            
+
             // Auto-assign if we found a good match and no one is assigned
             if (bestMatch && maxScore > 5 && issue.assignees.length === 0) {
               console.log(`Assigning to ${bestMatch} (score: ${maxScore})`);
-              
+
               await github.rest.issues.addAssignees({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
                 assignees: [bestMatch]
               });
-              
+
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -414,11 +414,11 @@ jobs:
             }
 
   stale-issue-management:
-    name: 🧹 Stale Issue Management  
+    name: 🧹 Stale Issue Management
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'cleanup' || github.event.inputs.action == 'all'))
     timeout-minutes: 15
-    
+
     steps:
       - name: 🧹 Mark stale issues
         uses: actions/github-script@v7
@@ -428,12 +428,12 @@ jobs:
             const closeAfterDays = 7; // days after being marked stale
             const staleDate = new Date();
             staleDate.setDate(staleDate.getDate() - staleAfterDays);
-            
+
             const closeDate = new Date();
             closeDate.setDate(closeDate.getDate() - (staleAfterDays + closeAfterDays));
-            
+
             console.log('🧹 Checking for stale issues...');
-            
+
             // Get all open issues
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -441,31 +441,31 @@ jobs:
               state: 'open',
               per_page: 100
             });
-            
+
             for (const issue of issues) {
               // Skip PRs and issues with certain labels
               if (issue.pull_request) continue;
-              
+
               const labels = issue.labels.map(l => l.name);
               const skipLabels = [
                 'priority: high',
-                'priority: critical', 
+                'priority: critical',
                 'status: pinned',
                 'status: in-progress',
                 'type: enhancement'
               ];
-              
+
               if (labels.some(label => skipLabels.includes(label))) {
                 continue;
               }
-              
+
               const updatedAt = new Date(issue.updated_at);
               const isStale = labels.includes('status: stale');
-              
+
               // Close issues that have been stale too long
               if (isStale && updatedAt < closeDate) {
                 console.log(`Closing stale issue #${issue.number}`);
-                
+
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -481,7 +481,7 @@ jobs:
                     "- Reference this issue number: #" + issue.number + "\n\n" +
                     "Thank you for your contribution! 🙏"
                 });
-                
+
                 await github.rest.issues.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -493,14 +493,14 @@ jobs:
               // Mark issues as stale
               else if (!isStale && updatedAt < staleDate) {
                 console.log(`Marking issue #${issue.number} as stale`);
-                
+
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: issue.number,
                   labels: ['status: stale']
                 });
-                
+
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -525,18 +525,18 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'metrics' || github.event.inputs.action == 'all'))
     timeout-minutes: 10
-    
+
     steps:
       - name: 📊 Generate issue metrics
         uses: actions/github-script@v7
         with:
           script: |
             console.log('📊 Generating issue metrics...');
-            
+
             // Get issues from the last 30 days
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            
+
             const { data: allIssues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -544,15 +544,15 @@ jobs:
               per_page: 100,
               since: thirtyDaysAgo.toISOString()
             });
-            
+
             // Filter out PRs
             const issues = allIssues.filter(issue => !issue.pull_request);
-            
+
             // Calculate metrics
             const openIssues = issues.filter(i => i.state === 'open').length;
             const closedIssues = issues.filter(i => i.state === 'closed').length;
             const totalIssues = issues.length;
-            
+
             // Response time (time to first response)
             let responseTimes = [];
             for (const issue of issues) {
@@ -561,7 +561,7 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: issue.number
               });
-              
+
               if (comments.length > 0) {
                 const firstResponse = new Date(comments[0].created_at);
                 const created = new Date(issue.created_at);
@@ -569,27 +569,27 @@ jobs:
                 responseTimes.push(responseTime);
               }
             }
-            
-            const avgResponseTime = responseTimes.length > 0 
+
+            const avgResponseTime = responseTimes.length > 0
               ? (responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length).toFixed(1)
               : 'N/A';
-            
+
             // Issue types
-            const bugReports = issues.filter(i => 
+            const bugReports = issues.filter(i =>
               i.labels.some(l => l.name.includes('bug')) ||
               i.title.toLowerCase().includes('bug')
             ).length;
-            
+
             const featureRequests = issues.filter(i =>
               i.labels.some(l => l.name.includes('enhancement') || l.name.includes('feature')) ||
               i.title.toLowerCase().includes('feature')
             ).length;
-            
+
             const questions = issues.filter(i =>
               i.labels.some(l => l.name.includes('question')) ||
               i.title.toLowerCase().includes('question')
             ).length;
-            
+
             // Create metrics summary
             const metrics = "## 📊 Issue Metrics (Last 30 Days)\n\n" +
               "### 📈 Overview\n" +
@@ -610,7 +610,7 @@ jobs:
               "*This report is automatically generated daily.*";
 
             console.log(metrics);
-            
+
             // Could post this as a discussion or save to file
             // For now, just log it
             core.summary.addRaw(metrics);

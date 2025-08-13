@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'edited')
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -36,13 +36,13 @@ jobs:
             const title = pr.title;
             const body = pr.body || '';
             const isDraft = pr.draft;
-            
+
             console.log('✅ Validating PR requirements...');
-            
+
             let validationErrors = [];
             let suggestions = [];
             let warnings = [];
-            
+
             // Title validation
             if (title.length < 10) {
               validationErrors.push('Title is too short (minimum 10 characters)');
@@ -50,18 +50,18 @@ jobs:
             if (title.length > 100) {
               validationErrors.push('Title is too long (maximum 100 characters)');
             }
-            
+
             // Check for conventional commits format
             const conventionalPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)(\(.+\))?: .+/;
             if (!conventionalPattern.test(title)) {
               suggestions.push('Consider using conventional commit format (e.g., "feat: add new feature")');
             }
-            
+
             // Description validation
             if (body.length < 50) {
               validationErrors.push('Description is too short (minimum 50 characters)');
             }
-            
+
             // Check for template usage
             const templateSections = [
               '## Description',
@@ -69,75 +69,75 @@ jobs:
               '## Testing',
               '## Checklist'
             ];
-            
+
             const usesTemplate = templateSections.some(section => body.includes(section));
             if (!usesTemplate && !isDraft) {
               suggestions.push('Please use the PR template for consistency');
             }
-            
+
             // Check for important sections in template
             if (usesTemplate) {
               if (!body.includes('- [x]') && !body.includes('- [X]')) {
                 warnings.push('No checklist items are marked as completed');
               }
-              
+
               if (body.includes('## Related Issues') && !body.match(/(fixes|closes|resolves) #\d+/i)) {
                 suggestions.push('Link related issues using "fixes #123" or "closes #123"');
               }
             }
-            
+
             // Check for breaking changes
-            const hasBreakingChanges = title.includes('!') || 
+            const hasBreakingChanges = title.includes('!') ||
                                      body.toLowerCase().includes('breaking change') ||
                                      body.toLowerCase().includes('breaking:');
-            
+
             if (hasBreakingChanges) {
               warnings.push('This PR contains breaking changes - ensure proper documentation and versioning');
             }
-            
+
             // File change analysis
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const changedFiles = files.map(f => f.filename);
             const additions = files.reduce((sum, f) => sum + f.additions, 0);
             const deletions = files.reduce((sum, f) => sum + f.deletions, 0);
-            
+
             // Large PR warning
             if (files.length > 20 || additions + deletions > 500) {
               warnings.push('Large PR detected - consider breaking into smaller PRs for easier review');
             }
-            
+
             // Check for test files
-            const hasTests = changedFiles.some(file => 
+            const hasTests = changedFiles.some(file =>
               file.includes('test') || file.includes('spec') || file.includes('__tests__')
             );
-            const hasSourceChanges = changedFiles.some(file => 
+            const hasSourceChanges = changedFiles.some(file =>
               file.includes('src/') && (file.endsWith('.ts') || file.endsWith('.js'))
             );
-            
+
             if (hasSourceChanges && !hasTests && !isDraft) {
               warnings.push('Source code changes detected but no test files modified');
             }
-            
+
             // Check for documentation updates
-            const hasDocChanges = changedFiles.some(file => 
+            const hasDocChanges = changedFiles.some(file =>
               file.includes('README') || file.includes('docs/') || file.endsWith('.md')
             );
-            const hasFeatureChanges = title.toLowerCase().includes('feat') || 
+            const hasFeatureChanges = title.toLowerCase().includes('feat') ||
                                     title.toLowerCase().includes('feature');
-            
+
             if (hasFeatureChanges && !hasDocChanges && !isDraft) {
               suggestions.push('Consider updating documentation for new features');
             }
-            
+
             // Generate validation comment if needed
             if (validationErrors.length > 0 || suggestions.length > 0 || warnings.length > 0) {
               let comment = '## 📋 PR Validation Report\n\n';
-              
+
               if (validationErrors.length > 0) {
                 comment += '### ❌ Issues Found\n';
                 validationErrors.forEach(error => {
@@ -145,7 +145,7 @@ jobs:
                 });
                 comment += '\n';
               }
-              
+
               if (warnings.length > 0) {
                 comment += '### ⚠️ Warnings\n';
                 warnings.forEach(warning => {
@@ -153,7 +153,7 @@ jobs:
                 });
                 comment += '\n';
               }
-              
+
               if (suggestions.length > 0) {
                 comment += '### 💡 Suggestions\n';
                 suggestions.forEach(suggestion => {
@@ -161,13 +161,13 @@ jobs:
                 });
                 comment += '\n';
               }
-              
+
               comment += '### 📊 PR Statistics\n';
               comment += `- **Files Changed**: ${files.length}\n`;
               comment += `- **Lines Added**: ${additions}\n`;
               comment += `- **Lines Removed**: ${deletions}\n`;
               comment += `- **Net Changes**: ${additions - deletions}\n\n`;
-              
+
               if (hasBreakingChanges) {
                 comment += '### 💥 Breaking Changes Detected\n';
                 comment += 'This PR contains breaking changes. Please ensure:\n';
@@ -175,20 +175,20 @@ jobs:
                 comment += '- [ ] Migration guide is updated\n';
                 comment += '- [ ] Changelog includes breaking change notes\n\n';
               }
-              
+
               comment += '### 🔗 Helpful Links\n';
               comment += '- [Contributing Guidelines](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/blob/main/CONTRIBUTING.md)\n';
               comment += '- [PR Template](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/blob/main/.github/PULL_REQUEST_TEMPLATE.md)\n';
               comment += '- [Conventional Commits](https://www.conventionalcommits.org/)\n\n';
               comment += '*This is an automated validation. Please address the issues above.*';
-              
+
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.number,
                 body: comment
               });
-              
+
               // Add labels based on validation
               const labels = [];
               if (validationErrors.length > 0) {
@@ -200,7 +200,7 @@ jobs:
               if (files.length > 20 || additions + deletions > 500) {
                 labels.push('size: extra-large');
               }
-              
+
               if (labels.length > 0) {
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -216,7 +216,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.action == 'ready_for_review'
     timeout-minutes: 5
-    
+
     steps:
       - name: 👥 Auto-assign reviewers
         uses: actions/github-script@v7
@@ -224,18 +224,18 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const author = pr.user.login;
-            
+
             console.log('👥 Assigning reviewers based on changed files...');
-            
+
             // Get changed files
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const changedPaths = files.map(f => f.filename);
-            
+
             // Reviewer expertise mapping
             const reviewers = {
               'your-username': {
@@ -248,20 +248,20 @@ jobs:
               //   priority: 2
               // }
             };
-            
+
             // Find best reviewers
             const suggestedReviewers = [];
-            
+
             for (const [username, config] of Object.entries(reviewers)) {
               if (username === author) continue; // Don't assign author as reviewer
-              
+
               let score = 0;
               for (const pattern of config.patterns) {
                 const regex = new RegExp(pattern.replace('*', '.*'));
                 const matches = changedPaths.filter(path => regex.test(path));
                 score += matches.length;
               }
-              
+
               if (score > 0) {
                 suggestedReviewers.push({
                   username,
@@ -270,16 +270,16 @@ jobs:
                 });
               }
             }
-            
+
             // Sort by score and priority
             suggestedReviewers.sort((a, b) => {
               if (a.priority !== b.priority) return a.priority - b.priority;
               return b.score - a.score;
             });
-            
+
             // Assign top reviewers (max 2)
             const reviewersToAssign = suggestedReviewers.slice(0, 2).map(r => r.username);
-            
+
             if (reviewersToAssign.length > 0) {
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
@@ -287,7 +287,7 @@ jobs:
                 pull_number: pr.number,
                 reviewers: reviewersToAssign
               });
-              
+
               console.log(`Assigned reviewers: ${reviewersToAssign.join(', ')}`);
             }
 
@@ -296,7 +296,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
     timeout-minutes: 5
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -310,32 +310,32 @@ jobs:
             const pr = context.payload.pull_request;
             const baseSha = pr.base.sha;
             const headSha = pr.head.sha;
-            
+
             console.log('📝 Checking if changelog needs updating...');
-            
+
             // Get changed files
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const changedFiles = files.map(f => f.filename);
-            const hasChangelogUpdate = changedFiles.some(file => 
+            const hasChangelogUpdate = changedFiles.some(file =>
               file.includes('CHANGELOG') || file.includes('changelog')
             );
-            
+
             // Check if this is a significant change that needs changelog entry
-            const hasSourceChanges = changedFiles.some(file => 
+            const hasSourceChanges = changedFiles.some(file =>
               file.startsWith('src/') && (file.endsWith('.ts') || file.endsWith('.js'))
             );
-            
-            const isFeatureOrFix = pr.title.toLowerCase().includes('feat') || 
+
+            const isFeatureOrFix = pr.title.toLowerCase().includes('feat') ||
                                  pr.title.toLowerCase().includes('fix') ||
                                  pr.title.toLowerCase().includes('feature');
-            
+
             const needsChangelog = hasSourceChanges && isFeatureOrFix && !pr.draft;
-            
+
             if (needsChangelog && !hasChangelogUpdate) {
               const comment = "## 📝 Changelog Update Needed\n\n" +
                 "This PR appears to introduce changes that should be documented in the changelog.\n\n" +
@@ -361,7 +361,7 @@ jobs:
                 issue_number: pr.number,
                 body: comment
               });
-              
+
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -369,7 +369,7 @@ jobs:
                 labels: ['status: needs-changelog']
               });
             }
-            
+
             // Remove label if changelog was updated
             if (hasChangelogUpdate) {
               try {
@@ -389,14 +389,14 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.action == 'ready_for_review'
     timeout-minutes: 5
-    
+
     steps:
       - name: ⏰ Set review reminder
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
-            
+
             // Wait 24 hours, then check if PR still needs review
             setTimeout(async () => {
               try {
@@ -405,7 +405,7 @@ jobs:
                   repo: context.repo.repo,
                   pull_number: pr.number
                 });
-                
+
                 // Only remind if still open and no recent reviews
                 if (currentPr.state === 'open' && !currentPr.draft) {
                   const { data: reviews } = await github.rest.pulls.listReviews({
@@ -413,13 +413,13 @@ jobs:
                     repo: context.repo.repo,
                     pull_number: pr.number
                   });
-                  
+
                   const recentReviews = reviews.filter(review => {
                     const reviewDate = new Date(review.submitted_at);
                     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
                     return reviewDate > oneDayAgo;
                   });
-                  
+
                   if (recentReviews.length === 0) {
                     await github.rest.issues.createComment({
                       owner: context.repo.owner,
@@ -443,7 +443,7 @@ jobs:
                 console.log('Review reminder error:', error.message);
               }
             }, 24 * 60 * 60 * 1000); // 24 hours
-            
+
             console.log('⏰ Review reminder scheduled for 24 hours');
 
   pr-metrics:
@@ -451,50 +451,50 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     timeout-minutes: 5
-    
+
     steps:
       - name: 📊 Calculate PR metrics
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
-            
+
             if (!pr.merged) {
               console.log('PR was closed without merging, skipping metrics');
               return;
             }
-            
+
             console.log('📊 Calculating PR metrics...');
-            
+
             const createdAt = new Date(pr.created_at);
             const mergedAt = new Date(pr.merged_at);
             const timeToMerge = Math.round((mergedAt - createdAt) / (1000 * 60 * 60)); // hours
-            
+
             // Get reviews
             const { data: reviews } = await github.rest.pulls.listReviews({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const firstReview = reviews.length > 0 ? reviews[0] : null;
-            const timeToFirstReview = firstReview 
+            const timeToFirstReview = firstReview
               ? Math.round((new Date(firstReview.submitted_at) - createdAt) / (1000 * 60 * 60))
               : null;
-            
+
             // Get commits and changes
             const { data: commits } = await github.rest.pulls.listCommits({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const metrics = {
               prNumber: pr.number,
               title: pr.title,
@@ -508,12 +508,12 @@ jobs:
               linesDeleted: pr.deletions,
               mergedAt: mergedAt.toISOString()
             };
-            
+
             console.log('PR Metrics:', JSON.stringify(metrics, null, 2));
-            
+
             // Could store these metrics in a database or file for analysis
             // For now, just log them
-            
+
             core.summary.addRaw("## 📊 PR #" + pr.number + " Metrics\n\n" +
               "- **Time to Merge**: " + timeToMerge + " hours\n" +
               "- **Time to First Review**: " + (timeToFirstReview || 'No reviews') + " " + (timeToFirstReview ? 'hours' : '') + "\n" +
@@ -523,5 +523,5 @@ jobs:
               "- **Lines**: +" + pr.additions + "/-" + pr.deletions + "\n" +
               "- **Author**: " + pr.user.login + "\n\n" +
               "*These metrics help us improve our development process.*");
-            
+
             await core.summary.write();

@@ -34,7 +34,7 @@ jobs:
     name: 🔍 Dependency Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -52,17 +52,17 @@ jobs:
         run: |
           echo "🔍 Running npm audit..."
           npm audit --audit-level moderate || AUDIT_EXIT_CODE=$?
-          
+
           if [[ $AUDIT_EXIT_CODE -ne 0 ]]; then
             echo "⚠️ npm audit found security vulnerabilities"
             npm audit --audit-level moderate --json > audit-results.json
-            
+
             echo "📊 Vulnerability summary:"
             jq '.metadata.vulnerabilities' audit-results.json
-            
+
             echo "🔧 Attempting automatic fixes..."
             npm audit fix --dry-run
-            
+
             if [[ $AUDIT_EXIT_CODE -gt 4 ]]; then
               echo "❌ Critical vulnerabilities found, failing build"
               exit 1
@@ -93,7 +93,7 @@ jobs:
     name: 🔐 Secret Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -111,34 +111,34 @@ jobs:
       - name: 🔍 Custom secret patterns
         run: |
           echo "🔍 Scanning for custom secret patterns..."
-          
+
           # Check for common secret patterns
           SECRETS_FOUND=false
-          
+
           # API Keys
           if grep -r -i "api[_-]key.*=" . --exclude-dir=node_modules --exclude-dir=.git --exclude="*.md" | grep -v "your-api-key" | grep -v "API_KEY"; then
             echo "⚠️ Potential API key found"
             SECRETS_FOUND=true
           fi
-          
+
           # Tokens
           if grep -r -i "token.*=" . --exclude-dir=node_modules --exclude-dir=.git --exclude="*.md" | grep -v "your-token" | grep -v "TOKEN"; then
             echo "⚠️ Potential token found"
             SECRETS_FOUND=true
           fi
-          
+
           # Private keys
           if grep -r "BEGIN.*PRIVATE KEY" . --exclude-dir=node_modules --exclude-dir=.git; then
             echo "⚠️ Private key found"
             SECRETS_FOUND=true
           fi
-          
+
           # Passwords in code
           if grep -r -i "password.*=" . --exclude-dir=node_modules --exclude-dir=.git --exclude="*.md" | grep -v "your-password" | grep -v "PASSWORD"; then
             echo "⚠️ Potential password found"
             SECRETS_FOUND=true
           fi
-          
+
           if [[ "$SECRETS_FOUND" == "true" ]]; then
             echo "❌ Secrets detected! Please review and remove them."
             exit 1
@@ -154,12 +154,12 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    
+
     strategy:
       fail-fast: false
       matrix:
         language: [ 'typescript' ]
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -191,7 +191,7 @@ jobs:
     name: 🎯 Semgrep Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -212,7 +212,7 @@ jobs:
     name: 📜 License Compliance Check
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -229,16 +229,16 @@ jobs:
       - name: 📜 Check licenses
         run: |
           echo "📜 Checking dependency licenses..."
-          
+
           # Install license checker
           npm install -g license-checker
-          
+
           # Generate license report
           license-checker --json > licenses.json
-          
+
           # Check for problematic licenses
           PROBLEMATIC_LICENSES=("GPL" "AGPL" "LGPL" "MPL")
-          
+
           echo "🔍 Scanning for problematic licenses..."
           for license in "${PROBLEMATIC_LICENSES[@]}"; do
             if grep -i "$license" licenses.json; then
@@ -246,7 +246,7 @@ jobs:
               echo "📄 Please review license compatibility"
             fi
           done
-          
+
           echo "✅ License check completed"
 
       - name: 📤 Upload license report
@@ -261,7 +261,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event.inputs.scan_type == 'container' || github.event.inputs.scan_type == 'full'
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -277,11 +277,11 @@ jobs:
           EXPOSE 3000
           CMD ["node", "dist/index.js"]
           EOF
-          
+
           echo "📦 Installing dependencies for image..."
           npm ci
           npm run build
-          
+
           echo "🐳 Building test image..."
           docker build -f Dockerfile.security-test -t whatsapp-mcp-server:security-test .
 
@@ -304,13 +304,13 @@ jobs:
     needs: [dependency-scan, secret-scan, codeql, semgrep, license-check]
     if: always()
     timeout-minutes: 5
-    
+
     steps:
       - name: 📊 Generate security summary
         run: |
           echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Check job results
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
@@ -320,12 +320,12 @@ jobs:
           echo "| Semgrep Scan | ${{ needs.semgrep.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| License Check | ${{ needs.license-check.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Overall status
-          if [[ "${{ needs.dependency-scan.result }}" == "success" && 
-                "${{ needs.secret-scan.result }}" == "success" && 
-                "${{ needs.codeql.result }}" == "success" && 
-                "${{ needs.semgrep.result }}" == "success" && 
+          if [[ "${{ needs.dependency-scan.result }}" == "success" &&
+                "${{ needs.secret-scan.result }}" == "success" &&
+                "${{ needs.codeql.result }}" == "success" &&
+                "${{ needs.semgrep.result }}" == "success" &&
                 "${{ needs.license-check.result }}" == "success" ]]; then
             echo "### ✅ Overall Status: **PASSED**" >> $GITHUB_STEP_SUMMARY
             echo "All security checks completed successfully!" >> $GITHUB_STEP_SUMMARY
@@ -333,7 +333,7 @@ jobs:
             echo "### ❌ Overall Status: **FAILED**" >> $GITHUB_STEP_SUMMARY
             echo "One or more security checks failed. Please review the results." >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📅 Scan Date: $(date -u)" >> $GITHUB_STEP_SUMMARY
           echo "🔗 Run Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY

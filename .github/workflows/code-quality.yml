@@ -23,7 +23,7 @@ jobs:
     name: 🔍 Linting & Formatting
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -77,7 +77,7 @@ jobs:
     name: 🎯 TypeScript Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -94,22 +94,22 @@ jobs:
       - name: 🎯 Type coverage analysis
         run: |
           echo "🎯 Analyzing TypeScript type coverage..."
-          
+
           # Install simpler type coverage tool
           npm install -g type-coverage
-          
+
           # Generate type coverage report
           npx type-coverage --detail > type-coverage-report.txt || echo "⚠️ Type coverage analysis completed"
-          
+
           # Extract coverage percentage and create simple report
           if [ -f type-coverage-report.txt ]; then
             COVERAGE=$(grep -o '[0-9]\+\.[0-9]\+%' type-coverage-report.txt | head -1)
             echo "📊 Type coverage: $COVERAGE"
-            
+
             # Create HTML report directory with simple report
             mkdir -p type-coverage-report
             echo "<h1>Type Coverage Report</h1><p>Coverage: $COVERAGE</p><pre>$(cat type-coverage-report.txt)</pre>" > type-coverage-report/index.html
-            
+
             echo "type-coverage=$COVERAGE" >> $GITHUB_OUTPUT
           else
             echo "📊 Type coverage: N/A"
@@ -128,7 +128,7 @@ jobs:
     name: 🧪 Test Coverage Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -160,18 +160,18 @@ jobs:
               console.log('🌟 Functions:', total.functions.pct + '%');
               console.log('🔀 Branches:', total.branches.pct + '%');
               console.log('📄 Statements:', total.statements.pct + '%');
-              
+
               // Check thresholds
               const thresholds = { lines: 80, functions: 80, branches: 70, statements: 80 };
               let failed = false;
-              
+
               Object.keys(thresholds).forEach(key => {
                 if (total[key].pct < thresholds[key]) {
                   console.log('❌ ' + key + ' coverage below threshold:', total[key].pct + '% < ' + thresholds[key] + '%');
                   failed = true;
                 }
               });
-              
+
               if (failed) {
                 console.log('❌ Coverage thresholds not met');
                 process.exit(1);
@@ -204,7 +204,7 @@ jobs:
     name: 📈 Code Metrics
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -221,28 +221,27 @@ jobs:
       - name: 📈 Analyze code complexity
         run: |
           echo "📈 Analyzing code complexity..."
-          
+
           # Install complexity analysis tools
-          npm install -g typescript-complexity-report
           npm install -g jscpd
-          
+
           # Generate complexity report using ESLint complexity rule
           echo "🔍 Running complexity analysis..."
           npx eslint src/ --rule 'complexity: [2, 10]' --format json > complexity-report.json || echo "⚠️ Some complexity issues found"
-          
+
           # Simple complexity check
           echo "📊 Complexity Summary:"
           if [ -f complexity-report.json ]; then
             node -e "
               try {
                 const report = require('./complexity-report.json');
-                const complexityIssues = report.filter(file => 
+                const complexityIssues = report.filter(file =>
                   file.messages.some(msg => msg.ruleId === 'complexity')
                 );
-                
+
                 console.log('📊 Files analyzed:', report.length);
                 console.log('⚠️ Files with complexity issues:', complexityIssues.length);
-                
+
                 if (complexityIssues.length > 0) {
                   console.log('⚠️ Consider refactoring high complexity functions');
                 } else {
@@ -260,7 +259,7 @@ jobs:
         run: |
           echo "📋 Detecting duplicate code..."
           jscpd src/ --reporters json --output ./jscpd-report.json || echo "⚠️ jscpd analysis completed with warnings"
-          
+
           if [ -f jscpd-report.json ]; then
             echo "📊 Duplication Summary:"
             node -e "
@@ -268,7 +267,7 @@ jobs:
                 const report = require('./jscpd-report.json');
                 const duplicates = report.duplicates || [];
                 console.log('📊 Total duplicates found:', duplicates.length);
-                
+
                 if (duplicates.length > 10) {
                   console.log('⚠️ High number of duplicates found - consider refactoring');
                 } else if (duplicates.length > 0) {
@@ -296,7 +295,7 @@ jobs:
     name: 📦 Dependency Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -313,11 +312,11 @@ jobs:
       - name: 📦 Dependency tree analysis
         run: |
           echo "📦 Analyzing dependency tree..."
-          
+
           # Check for outdated dependencies
           echo "🔍 Checking for outdated dependencies..."
           npm outdated --json > outdated-deps.json || echo "✅ All dependencies are up to date"
-          
+
           if [ -s outdated-deps.json ]; then
             echo "📊 Outdated Dependencies Summary:"
             node -e "
@@ -325,12 +324,12 @@ jobs:
                 const outdated = require('./outdated-deps.json');
                 const deps = Object.keys(outdated);
                 console.log('📊 Outdated dependencies:', deps.length);
-                
+
                 deps.forEach(dep => {
                   const info = outdated[dep];
                   console.log(\`  - \${dep}: \${info.current} → \${info.latest}\`);
                 });
-                
+
                 if (deps.length > 20) {
                   console.log('⚠️ Many outdated dependencies - consider updating');
                 }
@@ -343,39 +342,39 @@ jobs:
       - name: 📈 Bundle size analysis
         run: |
           echo "📈 Analyzing bundle size..."
-          
+
           # Build the project
           npm run build
-          
+
           # Analyze bundle size
           echo "📊 Built file sizes:"
           du -sh dist/* || echo "⚠️ Could not analyze dist directory"
-          
+
           # Check for large files
           find dist -type f -size +1M -exec echo "⚠️ Large file found: {} ($(du -h {} | cut -f1))" \;
 
       - name: 🔍 Unused dependencies check
         run: |
           echo "🔍 Checking for unused dependencies..."
-          
+
           # Install depcheck
           npm install -g depcheck
-          
+
           # Run depcheck
           depcheck --json > depcheck-report.json || echo "✅ No unused dependencies found"
-          
+
           if [ -f depcheck-report.json ]; then
             echo "📊 Dependency Check Summary:"
             node -e "
               try {
                 const report = require('./depcheck-report.json');
-                
+
                 if (report.dependencies && report.dependencies.length > 0) {
                   console.log('⚠️ Unused dependencies:', report.dependencies.join(', '));
                 } else {
                   console.log('✅ No unused dependencies found');
                 }
-                
+
                 if (report.devDependencies && report.devDependencies.length > 0) {
                   console.log('⚠️ Unused devDependencies:', report.devDependencies.join(', '));
                 } else {
@@ -403,65 +402,65 @@ jobs:
     needs: [linting, type-coverage, test-coverage, code-metrics, dependency-analysis]
     if: always()
     timeout-minutes: 5
-    
+
     steps:
       - name: 🚪 Quality gate evaluation
         run: |
           echo "## 📏 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Check all job results
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          
+
           # Check each job result
           if [[ "${{ needs.linting.result }}" == "success" ]]; then
             echo "| Linting & Formatting | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Linting & Formatting | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [[ "${{ needs.type-coverage.result }}" == "success" ]]; then
             echo "| Type Coverage | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Type Coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [[ "${{ needs.test-coverage.result }}" == "success" ]]; then
             echo "| Test Coverage | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Test Coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [[ "${{ needs.code-metrics.result }}" == "success" ]]; then
             echo "| Code Metrics | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Code Metrics | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [[ "${{ needs.dependency-analysis.result }}" == "success" ]]; then
             echo "| Dependency Analysis | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Dependency Analysis | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Calculate overall quality score
           PASSED=0
           TOTAL=5
-          
+
           [[ "${{ needs.linting.result }}" == "success" ]] && ((PASSED++))
           [[ "${{ needs.type-coverage.result }}" == "success" ]] && ((PASSED++))
           [[ "${{ needs.test-coverage.result }}" == "success" ]] && ((PASSED++))
           [[ "${{ needs.code-metrics.result }}" == "success" ]] && ((PASSED++))
           [[ "${{ needs.dependency-analysis.result }}" == "success" ]] && ((PASSED++))
-          
+
           SCORE=$((PASSED * 100 / TOTAL))
-          
+
           echo "### 📊 Quality Score: $SCORE% ($PASSED/$TOTAL)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [[ $SCORE -ge 80 ]]; then
             echo "### ✅ Quality Gate: **PASSED**" >> $GITHUB_STEP_SUMMARY
             echo "Code quality meets the required standards!" >> $GITHUB_STEP_SUMMARY

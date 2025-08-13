@@ -15,7 +15,7 @@ jobs:
     permissions:
       issues: write
       contents: read
-    
+
     steps:
       - name: 🏷️ Auto-label issues
         uses: actions/github-script@v7
@@ -25,81 +25,101 @@ jobs:
             const title = issue.title.toLowerCase();
             const body = issue.body ? issue.body.toLowerCase() : '';
             const labels = [];
-            
+
             // Priority labels based on title/body keywords
-            if (title.includes('critical') || body.includes('critical') || 
+            if (title.includes('critical') || body.includes('critical') ||
                 title.includes('urgent') || body.includes('urgent')) {
               labels.push('priority: high');
             } else if (title.includes('important') || body.includes('important')) {
               labels.push('priority: medium');
             }
-            
+
             // Type labels based on title patterns
-            if (title.startsWith('[bug]') || title.includes('bug') || 
+            if (title.startsWith('[bug]') || title.includes('bug') ||
                 title.includes('error') || title.includes('issue')) {
               labels.push('type: bug');
-            } else if (title.startsWith('[feature]') || title.includes('feature') || 
+            } else if (title.startsWith('[feature]') || title.includes('feature') ||
                        title.includes('enhancement') || title.includes('improvement')) {
               labels.push('type: enhancement');
-            } else if (title.startsWith('[question]') || title.includes('question') || 
+            } else if (title.startsWith('[question]') || title.includes('question') ||
                        title.includes('help') || title.includes('how to')) {
               labels.push('type: question');
             } else if (title.includes('documentation') || title.includes('docs')) {
               labels.push('type: documentation');
             }
-            
+
             // Component labels based on content
-            if (body.includes('whatsapp') || body.includes('authentication') || 
+            if (body.includes('whatsapp') || body.includes('authentication') ||
                 body.includes('qr code') || body.includes('session')) {
               labels.push('component: whatsapp');
             }
-            if (body.includes('audio') || body.includes('tts') || 
+            if (body.includes('audio') || body.includes('tts') ||
                 body.includes('elevenlabs') || body.includes('voice')) {
               labels.push('component: audio');
             }
-            if (body.includes('mcp') || body.includes('model context protocol') || 
+            if (body.includes('mcp') || body.includes('model context protocol') ||
                 body.includes('claude')) {
               labels.push('component: mcp');
             }
-            if (body.includes('install') || body.includes('setup') || 
+            if (body.includes('install') || body.includes('setup') ||
                 body.includes('configuration') || body.includes('config')) {
               labels.push('component: setup');
             }
-            
+
             // OS labels
             if (body.includes('windows') || body.includes('win32')) {
               labels.push('os: windows');
-            } else if (body.includes('macos') || body.includes('darwin') || 
+            } else if (body.includes('macos') || body.includes('darwin') ||
                        body.includes('mac os')) {
               labels.push('os: macos');
             } else if (body.includes('linux') || body.includes('ubuntu')) {
               labels.push('os: linux');
             }
-            
+
             // Add needs-triage for all new issues
             labels.push('status: needs-triage');
-            
-            // Apply labels
+
+            // Apply labels with error handling
             if (labels.length > 0) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                labels: labels
-              });
-              
-              console.log(`Applied labels: ${labels.join(', ')}`);
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: labels
+                });
+
+                console.log(`Applied labels: ${labels.join(', ')}`);
+              } catch (error) {
+                console.log(`Failed to apply some labels: ${error.message}`);
+                console.log(`Attempted labels: ${labels.join(', ')}`);
+                
+                // Try applying labels one by one to see which ones work
+                for (const label of labels) {
+                  try {
+                    await github.rest.issues.addLabels({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: issue.number,
+                      labels: [label]
+                    });
+                    console.log(`Applied label: ${label}`);
+                  } catch (labelError) {
+                    console.log(`Failed to apply label '${label}': ${labelError.message}`);
+                  }
+                }
+              }
             }
 
   auto-label-prs:
-    name: 🏷️ Label Pull Requests  
+    name: 🏷️ Label Pull Requests
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     timeout-minutes: 5
     permissions:
       pull-requests: write
       contents: read
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -114,13 +134,13 @@ jobs:
             const title = pr.title.toLowerCase();
             const body = pr.body ? pr.body.toLowerCase() : '';
             const labels = [];
-            
+
             // Size labels based on changes
             const changedFiles = pr.changed_files;
             const additions = pr.additions;
             const deletions = pr.deletions;
             const totalChanges = additions + deletions;
-            
+
             if (totalChanges < 50) {
               labels.push('size: small');
             } else if (totalChanges < 200) {
@@ -130,17 +150,17 @@ jobs:
             } else {
               labels.push('size: extra-large');
             }
-            
+
             // Type labels based on title patterns
-            if (title.startsWith('fix:') || title.startsWith('bugfix:') || 
+            if (title.startsWith('fix:') || title.startsWith('bugfix:') ||
                 title.includes('fix') || title.includes('bug')) {
               labels.push('type: bugfix');
-            } else if (title.startsWith('feat:') || title.startsWith('feature:') || 
+            } else if (title.startsWith('feat:') || title.startsWith('feature:') ||
                        title.includes('feature') || title.includes('add')) {
               labels.push('type: feature');
             } else if (title.startsWith('docs:') || title.includes('documentation')) {
-              labels.push('type: documentation');  
-            } else if (title.startsWith('chore:') || title.includes('chore') || 
+              labels.push('type: documentation');
+            } else if (title.startsWith('chore:') || title.includes('chore') ||
                        title.includes('maintenance')) {
               labels.push('type: maintenance');
             } else if (title.startsWith('refactor:') || title.includes('refactor')) {
@@ -150,22 +170,22 @@ jobs:
             } else if (title.startsWith('perf:') || title.includes('performance')) {
               labels.push('type: performance');
             }
-            
+
             // Breaking change detection
-            if (title.includes('breaking') || body.includes('breaking change') || 
+            if (title.includes('breaking') || body.includes('breaking change') ||
                 title.includes('!:')) {
               labels.push('breaking-change');
             }
-            
+
             // Get changed files to determine components
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const changedPaths = files.map(f => f.filename);
-            
+
             // Component labels based on changed files
             if (changedPaths.some(p => p.includes('auth'))) {
               labels.push('component: authentication');
@@ -185,24 +205,44 @@ jobs:
             if (changedPaths.some(p => p.includes('docs/') || p.includes('.md'))) {
               labels.push('component: documentation');
             }
-            
+
             // Draft PR label
             if (pr.draft) {
               labels.push('status: draft');
             } else {
               labels.push('status: ready-for-review');
             }
-            
-            // Apply labels
+
+            // Apply labels with error handling
             if (labels.length > 0) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: labels
-              });
-              
-              console.log(`Applied labels: ${labels.join(', ')}`);
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  labels: labels
+                });
+
+                console.log(`Applied labels: ${labels.join(', ')}`);
+              } catch (error) {
+                console.log(`Failed to apply some labels: ${error.message}`);
+                console.log(`Attempted labels: ${labels.join(', ')}`);
+                
+                // Try applying labels one by one to see which ones work
+                for (const label of labels) {
+                  try {
+                    await github.rest.issues.addLabels({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: pr.number,
+                      labels: [label]
+                    });
+                    console.log(`Applied label: ${label}`);
+                  } catch (labelError) {
+                    console.log(`Failed to apply label '${label}': ${labelError.message}`);
+                  }
+                }
+              }
             }
 
   conflict-detection:
@@ -213,7 +253,7 @@ jobs:
     permissions:
       pull-requests: write
       contents: read
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -223,7 +263,7 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
-            
+
             // Check if PR is mergeable
             if (pr.mergeable === false) {
               await github.rest.issues.addLabels({
@@ -232,7 +272,7 @@ jobs:
                 issue_number: pr.number,
                 labels: ['status: merge-conflict']
               });
-              
+
               // Add a comment about the conflict
               const body = "🚨 **Merge Conflict Detected**\n\n" +
                 "This pull request has merge conflicts that need to be resolved before it can be merged.\n\n" +
