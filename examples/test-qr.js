@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { WhatsAppClientWrapper } from './dist/whatsapp-client.js';
+import { WhatsAppClientWrapper } from '../dist/whatsapp-client.js';
 
 async function testQRCode() {
   console.log('🚀 Testing WhatsApp QR Code Generation\n');
