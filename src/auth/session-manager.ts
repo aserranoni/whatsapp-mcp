@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
+import { AuthErrorMessages } from './auth-errors.js';
 
 export interface SessionInfo {
   name: string;
@@ -59,7 +60,7 @@ export class SessionManager {
         .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
     } catch (error) {
       if ((error as { code?: string }).code === 'ENOENT') {
-        throw new Error(`Session directory not found: ${this.config.sessionDir}. Please run authentication first.`);
+        throw AuthErrorMessages.createSessionNotFound();
       }
       console.error('❌ Error in findValidSessions:', error);
       throw error;
@@ -71,7 +72,7 @@ export class SessionManager {
     const validSessions = sessions.filter(s => s.isValid);
     
     if (validSessions.length === 0) {
-      throw new Error('No valid WhatsApp sessions found. Please run authentication first.');
+      throw AuthErrorMessages.createSessionNotFound();
     }
 
     const selectedSession = validSessions[0]!;

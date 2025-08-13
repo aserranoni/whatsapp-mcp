@@ -19,3 +19,12 @@ export {
   type AuthenticationResult,
   type AuthContext
 } from './auth-strategy.js';
+export {
+  AuthError,
+  AuthErrorMessages,
+  AuthErrorCode,
+  type AuthErrorInfo,
+  isAuthError,
+  formatAuthError,
+  logAuthError
+} from './auth-errors.js';

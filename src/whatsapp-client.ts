@@ -9,6 +9,8 @@ import {
   AuthStateManager, 
   AuthState, 
   AuthStrategyManager,
+  AuthErrorMessages,
+  logAuthError,
   type AuthContext
 } from './auth/index.js';
 import type { 
@@ -76,11 +78,10 @@ export class WhatsAppClientWrapper {
         message: 'QR code required for authentication',
         reason: 'Session expired or invalid'
       });
-      console.error('\n❌ WhatsApp session authentication required!');
-      console.error('The saved session has expired or is invalid.');
-      console.error('Please run "npm run auth" to re-authenticate.\n');
-      this.lastError = 'Session authentication required - run "npm run auth"';
-      throw new Error('Session authentication required - run "npm run auth"');
+      const error = AuthErrorMessages.createSessionExpired(this.config.sessionName);
+      logAuthError(error, 'QR Event');
+      this.lastError = error.message;
+      throw error;
     });
 
     this.client.on('loading_screen', (percent: number, message: string) => {
@@ -121,26 +122,24 @@ export class WhatsAppClientWrapper {
     });
 
     this.client.on('auth_failure', (msg: string) => {
-      console.error('❌ WhatsApp authentication failed:', msg);
-      this.lastError = `Authentication failed: ${msg}`;
+      const error = AuthErrorMessages.createAuthenticationFailed(msg, this.config.sessionName);
+      logAuthError(error, 'Auth Failure');
+      this.lastError = error.message;
       this.isReady = false;
       this.authStateManager.transitionTo(AuthState.FAILED, {
-        error: `Authentication failed: ${msg}`,
+        error: error.message,
         reason: msg
       });
     });
 
     this.client.on('disconnected', (reason: string) => {
-      console.log('🔌 WhatsApp client disconnected:', reason);
+      const error = AuthErrorMessages.createClientDisconnected(reason, this.config.sessionName);
+      logAuthError(error, 'Disconnected');
       this.isReady = false;
-      this.lastError = `Disconnected: ${reason}`;
-      
-      if (reason === 'LOGOUT') {
-        console.log('⚠️  Session logged out. Run `npm run auth` to re-authenticate.');
-      }
+      this.lastError = error.message;
 
       this.authStateManager.transitionTo(AuthState.DISCONNECTED, {
-        message: `Client disconnected: ${reason}`,
+        message: error.message,
         reason: reason
       });
     });
@@ -166,14 +165,18 @@ export class WhatsAppClientWrapper {
       if (!authResult.success) {
         if (authResult.requiresQr) {
           // QR code required - this is handled by the event handlers
-          throw new Error(authResult.error || 'QR code authentication required');
+          throw AuthErrorMessages.createQrCodeRequired(this.config.sessionName);
         } else {
           // Other authentication failure
+          const error = AuthErrorMessages.createAuthenticationFailed(
+            authResult.error || 'Unknown authentication error',
+            this.config.sessionName
+          );
           this.authStateManager.transitionTo(AuthState.FAILED, {
-            error: authResult.error || 'Authentication failed',
+            error: error.message,
             reason: authResult.error || 'Unknown authentication error'
           });
-          throw new Error(authResult.error || 'Authentication failed');
+          throw error;
         }
       }
       
@@ -184,7 +187,11 @@ export class WhatsAppClientWrapper {
       // Wait for ready state with timeout
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error(`Client initialization timed out after ${this.authConfig.authTimeoutMs}ms`));
+          const error = AuthErrorMessages.createInitializationTimeout(
+            this.authConfig.authTimeoutMs,
+            this.config.sessionName
+          );
+          reject(error);
         }, this.authConfig.authTimeoutMs);
 
         this.client.once('ready', () => {
@@ -194,17 +201,18 @@ export class WhatsAppClientWrapper {
 
         this.client.once('auth_failure', (msg: any) => {
           clearTimeout(timeout);
-          reject(new Error(`Authentication failed: ${msg}`));
+          reject(AuthErrorMessages.createAuthenticationFailed(msg, this.config.sessionName));
         });
         
         // Also handle disconnection during initialization
         this.client.once('disconnected', (reason: string) => {
           clearTimeout(timeout);
-          reject(new Error(`Disconnected during initialization: ${reason}`));
+          reject(AuthErrorMessages.createClientDisconnected(reason, this.config.sessionName));
         });
       });
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : 'Unknown error';
+      logAuthError(error instanceof Error ? error : new Error('Unknown error'), 'Initialize');
       throw error;
     }
   }

@@ -1,3 +1,5 @@
+import { AuthErrorMessages } from './auth-errors.js';
+
 export interface AuthConfig {
   sessionDir: string;
   sessionPrefix: string;
@@ -124,27 +126,27 @@ export class AuthConfigManager {
 
   static validateConfig(config: AuthConfig): void {
     if (config.authTimeoutMs <= 0) {
-      throw new Error('Auth timeout must be positive');
+      throw AuthErrorMessages.createConfigValidationFailed('authTimeoutMs', config.authTimeoutMs);
     }
 
     if (config.qrCodeTimeout <= 0) {
-      throw new Error('QR code timeout must be positive');
+      throw AuthErrorMessages.createConfigValidationFailed('qrCodeTimeout', config.qrCodeTimeout);
     }
 
     if (config.maxRetries < 0) {
-      throw new Error('Max retries cannot be negative');
+      throw AuthErrorMessages.createConfigValidationFailed('maxRetries', config.maxRetries);
     }
 
     if (config.retryDelayMs < 0) {
-      throw new Error('Retry delay cannot be negative');
+      throw AuthErrorMessages.createConfigValidationFailed('retryDelayMs', config.retryDelayMs);
     }
 
     if (!config.sessionDir || config.sessionDir.trim() === '') {
-      throw new Error('Session directory cannot be empty');
+      throw AuthErrorMessages.createConfigValidationFailed('sessionDir', config.sessionDir);
     }
 
     if (!config.sessionPrefix || config.sessionPrefix.trim() === '') {
-      throw new Error('Session prefix cannot be empty');
+      throw AuthErrorMessages.createConfigValidationFailed('sessionPrefix', config.sessionPrefix);
     }
   }
 }

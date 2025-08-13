@@ -26,6 +26,8 @@ export interface AuthStateTransition {
   reason?: string;
 }
 
+import { AuthErrorMessages } from './auth-errors.js';
+
 export class AuthStateManager {
   private currentState: AuthState = AuthState.UNINITIALIZED;
   private stateInfo: AuthStateInfo;
@@ -61,7 +63,7 @@ export class AuthStateManager {
     const previousState = this.currentState;
     
     if (!this.isValidTransition(previousState, newState)) {
-      throw new Error(`Invalid state transition from ${previousState} to ${newState}`);
+      throw AuthErrorMessages.createInvalidStateTransition(previousState, newState);
     }
 
     // Record transition
