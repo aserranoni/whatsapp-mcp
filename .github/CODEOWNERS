@@ -1,0 +1,36 @@
+# Global owners - these users are automatically requested for review on all PRs
+* @your-username
+
+# Documentation
+*.md @your-username
+docs/ @your-username
+.github/ @your-username
+
+# Core source code
+src/ @your-username
+*.ts @your-username
+*.js @your-username
+
+# Configuration files
+package.json @your-username
+tsconfig.json @your-username
+.eslintrc.json @your-username
+jest.config.js @your-username
+
+# Authentication system (requires extra attention)
+src/auth/ @your-username
+
+# CI/CD and automation
+.github/workflows/ @your-username
+.github/actions/ @your-username
+
+# Examples and tests
+examples/ @your-username
+src/__tests__/ @your-username
+*.test.ts @your-username
+*.spec.ts @your-username
+
+# Security sensitive files
+.env.example @your-username
+.npmignore @your-username
+.gitignore @your-username

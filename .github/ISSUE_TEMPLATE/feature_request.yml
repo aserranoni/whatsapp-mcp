@@ -1,0 +1,155 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement", "needs-discussion"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! 🚀
+        
+        Before submitting, please search existing issues to avoid duplicates.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-flight checklist
+      description: Please confirm you've completed these steps
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have read the project roadmap and documentation
+          required: true
+        - label: This feature would benefit the broader community
+          required: true
+
+  - type: textarea
+    id: feature-summary
+    attributes:
+      label: Feature Summary
+      description: A brief, clear description of the feature
+      placeholder: Add support for receiving and responding to WhatsApp messages...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: Feature Category
+      options:
+        - WhatsApp Integration
+        - Audio/TTS Features
+        - MCP Protocol
+        - Authentication
+        - Developer Experience
+        - Documentation
+        - CI/CD
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve?
+      placeholder: |
+        Currently, users cannot...
+        This makes it difficult to...
+        The workaround is...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your ideal solution
+      placeholder: |
+        I would like to see...
+        This could work by...
+        The API could be...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Any alternative solutions or features you've considered
+      placeholder: |
+        Alternative 1: ...
+        Alternative 2: ...
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      description: How important is this feature to you?
+      options:
+        - Low (nice to have)
+        - Medium (would be helpful)
+        - High (blocks current workflow)
+        - Critical (prevents usage)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Implementation Complexity (your estimate)
+      options:
+        - Simple (small change)
+        - Medium (moderate effort)
+        - Complex (significant work)
+        - Major (architectural changes)
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: Specific scenarios where this feature would be used
+      placeholder: |
+        Use case 1: As a developer, I want to...
+        Use case 2: As a user, I need to...
+        Use case 3: When integrating with...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How would you know this feature is complete?
+      placeholder: |
+        - [ ] Feature X works as described
+        - [ ] Documentation is updated
+        - [ ] Tests are added
+        - [ ] API is backward compatible
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, mockups, or examples
+      placeholder: |
+        Links to similar implementations:
+        - https://...
+        
+        Mockups or examples:
+        - ...
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Are you willing to help implement this feature?
+      options:
+        - label: I can help with implementation
+        - label: I can help with testing
+        - label: I can help with documentation
+        - label: I can provide feedback during development
