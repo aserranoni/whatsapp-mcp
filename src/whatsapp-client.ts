@@ -4,7 +4,7 @@ const { Client, LocalAuth, MessageMedia } = pkg;
 type WhatsAppClient = InstanceType<typeof Client>;
 import path from 'path';
 import fs from 'fs/promises';
-import { AuthConfigManager } from './auth/index.js';
+import { AuthConfigManager, AuthStateManager, AuthState } from './auth/index.js';
 import type { 
   WhatsAppConfig, 
   AudioMessage, 
@@ -20,9 +20,11 @@ export class WhatsAppClientWrapper {
   private lastError: string | null = null;
   private phoneNumber: string | null = null;
   private lastConnected: Date | null = null;
+  private authStateManager: AuthStateManager;
 
   constructor(config: WhatsAppConfig) {
     this.config = config;
+    this.authStateManager = new AuthStateManager();
     
     const puppeteerConfig = AuthConfigManager.createPuppeteerConfig({
       userDataDir: config.userDataDir
@@ -43,6 +45,10 @@ export class WhatsAppClientWrapper {
 
   private setupEventHandlers(): void {
     this.client.on('qr', (qr: string) => {
+      this.authStateManager.transitionTo(AuthState.WAITING_FOR_QR, {
+        message: 'QR code required for authentication',
+        reason: 'Session expired or invalid'
+      });
       console.error('\n❌ WhatsApp session authentication required!');
       console.error('The saved session has expired or is invalid.');
       console.error('Please run "npm run auth" to re-authenticate.\n');
@@ -52,6 +58,12 @@ export class WhatsAppClientWrapper {
 
     this.client.on('loading_screen', (percent: number, message: string) => {
       console.log(`Loading WhatsApp: ${percent}% - ${message}`);
+      if (percent === 0) {
+        this.authStateManager.transitionTo(AuthState.INITIALIZING, {
+          message: 'Starting WhatsApp initialization',
+          sessionName: this.config.sessionName
+        });
+      }
     });
 
     this.client.on('ready', () => {
@@ -65,16 +77,30 @@ export class WhatsAppClientWrapper {
         this.phoneNumber = this.client.info.wid.user;
         console.log(`📱 Connected as: +${this.phoneNumber}`);
       }
+
+      this.authStateManager.transitionTo(AuthState.READY, {
+        message: 'WhatsApp client is ready',
+        sessionName: this.config.sessionName,
+        phoneNumber: this.phoneNumber || undefined
+      });
     });
 
     this.client.on('authenticated', () => {
       console.log('🔐 WhatsApp client authenticated successfully (using saved session)');
+      this.authStateManager.transitionTo(AuthState.AUTHENTICATED, {
+        message: 'Authentication successful using saved session',
+        sessionName: this.config.sessionName
+      });
     });
 
     this.client.on('auth_failure', (msg: string) => {
       console.error('❌ WhatsApp authentication failed:', msg);
       this.lastError = `Authentication failed: ${msg}`;
       this.isReady = false;
+      this.authStateManager.transitionTo(AuthState.FAILED, {
+        error: `Authentication failed: ${msg}`,
+        reason: msg
+      });
     });
 
     this.client.on('disconnected', (reason: string) => {
@@ -85,6 +111,11 @@ export class WhatsAppClientWrapper {
       if (reason === 'LOGOUT') {
         console.log('⚠️  Session logged out. Run `npm run auth` to re-authenticate.');
       }
+
+      this.authStateManager.transitionTo(AuthState.DISCONNECTED, {
+        message: `Client disconnected: ${reason}`,
+        reason: reason
+      });
     });
 
     this.client.on('message', (message: any) => {
@@ -97,11 +128,20 @@ export class WhatsAppClientWrapper {
 
   async initialize(): Promise<void> {
     try {
+      this.authStateManager.transitionTo(AuthState.INITIALIZING, {
+        message: 'Starting client initialization',
+        sessionName: this.config.sessionName
+      });
+
       // Check if we already have a session
       const sessionPath = path.join(this.config.userDataDir || './whatsapp_session', `session-${this.config.sessionName}`);
       const hasExistingSession = await fs.access(sessionPath).then(() => true).catch(() => false);
       
       if (!hasExistingSession) {
+        this.authStateManager.transitionTo(AuthState.FAILED, {
+          error: `No authenticated session found for '${this.config.sessionName}'. Please run "npm run auth" first.`,
+          reason: 'Session not found'
+        });
         throw new Error(`No authenticated session found for '${this.config.sessionName}'. Please run "npm run auth" first.`);
       }
       
@@ -227,14 +267,33 @@ export class WhatsAppClientWrapper {
   }
 
   getStatus(): WhatsAppClientStatus {
+    const authState = this.authStateManager.getStateInfo();
     return {
       isConnected: this.isReady,
       isAuthenticated: this.isReady,
       sessionName: this.config.sessionName,
       phoneNumber: this.phoneNumber || undefined,
       lastConnected: this.lastConnected || undefined,
-      error: this.lastError || undefined
+      error: this.lastError || undefined,
+      authState: authState.state,
+      authMessage: authState.message
     };
+  }
+
+  getAuthState(): AuthState {
+    return this.authStateManager.getCurrentState();
+  }
+
+  getAuthStateInfo(): import('./auth/index.js').AuthStateInfo {
+    return this.authStateManager.getStateInfo();
+  }
+
+  getAuthHistory(): import('./auth/index.js').AuthStateTransition[] {
+    return this.authStateManager.getTransitionHistory();
+  }
+
+  onAuthStateChange(callback: (info: import('./auth/index.js').AuthStateInfo) => void): void {
+    this.authStateManager.onAnyStateChange(callback);
   }
 
   async destroy(): Promise<void> {
@@ -242,5 +301,9 @@ export class WhatsAppClientWrapper {
       await this.client.destroy();
     }
     this.isReady = false;
+    this.authStateManager.transitionTo(AuthState.DESTROYED, {
+      message: 'Client destroyed',
+      reason: 'Manual destruction'
+    });
   }
 }

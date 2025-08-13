@@ -5,3 +5,9 @@ export {
   type PuppeteerConfig, 
   type WebVersionConfig 
 } from './auth-config.js';
+export { 
+  AuthStateManager,
+  AuthState,
+  type AuthStateInfo,
+  type AuthStateTransition
+} from './auth-state.js';

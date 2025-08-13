@@ -24,6 +24,8 @@ export interface WhatsAppClientStatus {
   phoneNumber?: string;
   lastConnected?: Date;
   error?: string;
+  authState?: string;
+  authMessage?: string;
 }
 
 export interface Contact {
