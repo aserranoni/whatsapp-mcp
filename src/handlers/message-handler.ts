@@ -1,9 +1,11 @@
 import { WhatsAppEventEmitter } from './event-emitter.js';
 import { RateLimiter } from './rate-limiter.js';
+import { StorageManager } from '../storage/storage-manager.js';
 import type { 
   IncomingMessage, 
   MessageFilter, 
   MessageHandlerConfig,
+  MessageReceivingConfig,
   QuotedMessage,
   MessageEvent
 } from '../types.js';
@@ -14,12 +16,23 @@ export class MessageHandler extends WhatsAppEventEmitter {
   private processedMessages: Set<string> = new Set();
   private rateLimiter: RateLimiter;
   private config: MessageHandlerConfig;
+  private storageManager?: StorageManager;
   private isProcessing = false;
 
   constructor(config: MessageHandlerConfig) {
     super();
     this.config = config;
     this.rateLimiter = new RateLimiter(config.rateLimitPerMinute);
+  }
+
+  configureStorage(storageConfig: MessageReceivingConfig): void {
+    this.storageManager = new StorageManager(storageConfig);
+  }
+
+  async initializeStorage(): Promise<void> {
+    if (this.storageManager) {
+      await this.storageManager.initialize();
+    }
   }
 
   async processMessage(rawMessage: any): Promise<IncomingMessage> {
@@ -42,10 +55,13 @@ export class MessageHandler extends WhatsAppEventEmitter {
       // Add to processed messages
       this.processedMessages.add(message.id);
 
-      // Add to queue if enabled
-      if (this.config.enableStorage) {
-        this.addToQueue(message);
+      // Save to storage if configured
+      if (this.config.enableStorage && this.storageManager) {
+        await this.storageManager.save(message);
       }
+
+      // Add to queue for local processing
+      this.addToQueue(message);
 
       // Emit specific events based on message characteristics
       this.emitMessageEvents(message);
@@ -187,7 +203,13 @@ export class MessageHandler extends WhatsAppEventEmitter {
     }
   }
 
-  filterMessages(filter: MessageFilter): IncomingMessage[] {
+  async filterMessages(filter: MessageFilter): Promise<IncomingMessage[]> {
+    // Use storage if available for more comprehensive filtering
+    if (this.storageManager) {
+      return await this.storageManager.filter(filter);
+    }
+
+    // Fallback to in-memory queue
     return this.messageQueue.filter(message => {
       if (filter.chatId && message.from !== filter.chatId && message.to !== filter.chatId) {
         return false;
@@ -300,15 +322,80 @@ export class MessageHandler extends WhatsAppEventEmitter {
   }
 
   // Get statistics about processed messages
-  getStats(): {
+  async getStats(): Promise<{
     totalProcessed: number;
     queueSize: number;
     rateLimitedSenders: number;
-  } {
-    return {
+    storageStats?: any;
+  }> {
+    const baseStats = {
       totalProcessed: this.processedMessages.size,
       queueSize: this.messageQueue.length,
       rateLimitedSenders: 0 // Would need to track this in rate limiter
     };
+
+    if (this.storageManager) {
+      const storageStats = await this.storageManager.getStats();
+      return {
+        ...baseStats,
+        storageStats
+      };
+    }
+
+    return baseStats;
+  }
+
+  // Storage management methods
+  getStorageManager(): StorageManager | undefined {
+    return this.storageManager;
+  }
+
+  async searchMessages(query: string): Promise<IncomingMessage[]> {
+    if (this.storageManager) {
+      return await this.storageManager.search(query);
+    }
+
+    // Fallback to basic queue search
+    const searchTerm = query.toLowerCase();
+    return this.messageQueue.filter(message => 
+      message.body.toLowerCase().includes(searchTerm) ||
+      message.from.toLowerCase().includes(searchTerm) ||
+      message.author?.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  async getRecentMessages(limit: number): Promise<IncomingMessage[]> {
+    if (this.storageManager) {
+      return await this.storageManager.getRecent(limit);
+    }
+
+    return [...this.messageQueue]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit);
+  }
+
+  async getChatMessages(chatId: string, limit: number): Promise<IncomingMessage[]> {
+    if (this.storageManager) {
+      return await this.storageManager.getByChat(chatId, limit);
+    }
+
+    return this.messageQueue
+      .filter(msg => msg.from === chatId || msg.to === chatId)
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit);
+  }
+
+  async getMessage(messageId: string): Promise<IncomingMessage | null> {
+    if (this.storageManager) {
+      return await this.storageManager.get(messageId);
+    }
+
+    return this.messageQueue.find(msg => msg.id === messageId) || null;
+  }
+
+  async closeStorage(): Promise<void> {
+    if (this.storageManager) {
+      await this.storageManager.close();
+    }
   }
 }
