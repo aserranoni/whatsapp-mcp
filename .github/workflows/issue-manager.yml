@@ -53,7 +53,7 @@ jobs:
               '## Feature Summary',
               '## Your Question',
               'Pre-flight checklist'
-           ];
+            ];
 
             const usesTemplate = templateMarkers.some(marker => body.includes(marker));
 
@@ -91,7 +91,7 @@ jobs:
                 'What would you like to know?',
                 'A brief, clear description of the feature',
                 'placeholder'
-             ];
+              ];
 
               const hasEmptyPlaceholders = emptyPatterns.some(pattern =>
                 body.includes(pattern)

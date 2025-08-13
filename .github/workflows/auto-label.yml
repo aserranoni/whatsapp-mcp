@@ -93,7 +93,7 @@ jobs:
               } catch (error) {
                 console.log(`Failed to apply some labels: ${error.message}`);
                 console.log(`Attempted labels: ${labels.join(', ')}`);
-                
+
                 // Try applying labels one by one to see which ones work
                 for (const label of labels) {
                   try {
@@ -227,7 +227,7 @@ jobs:
               } catch (error) {
                 console.log(`Failed to apply some labels: ${error.message}`);
                 console.log(`Attempted labels: ${labels.join(', ')}`);
-                
+
                 // Try applying labels one by one to see which ones work
                 for (const label of labels) {
                   try {
