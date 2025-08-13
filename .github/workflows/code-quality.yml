@@ -407,16 +407,15 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: 🚪 Quality gate evaluation
+      - name: 🚪 Quality gate summary
         run: |
           echo "## 📏 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Check all job results
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
-          # Check each job result
+      - name: 🚪 Quality gate evaluation
+        run: |
           if [[ "$LINTING_RESULT" == "success" ]]; then
             echo "| Linting & Formatting | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
