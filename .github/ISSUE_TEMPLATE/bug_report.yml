@@ -1,0 +1,142 @@
+name: 🐛 Bug Report
+description: File a bug report to help us improve
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! 🙏
+        
+        Please provide as much detail as possible to help us resolve the issue quickly.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-flight checklist
+      description: Please confirm you've completed these steps
+      options:
+        - label: I have searched existing issues to ensure this bug hasn't been reported yet
+          required: true
+        - label: I have read the troubleshooting section in the README
+          required: true
+        - label: I am using the latest version of whatsapp-mcp-server
+          required: true
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: Describe the issue you're experiencing...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the issue
+      placeholder: |
+        1. Run command '...'
+        2. Send message with '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+      placeholder: The message should send successfully...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened instead
+      placeholder: Got error message "..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-logs
+    attributes:
+      label: Error Messages/Logs
+      description: Include any relevant error messages or log output
+      placeholder: |
+        Paste error messages or logs here...
+        
+        Tip: Use ``` to format code blocks
+      render: shell
+
+  - type: dropdown
+    id: environment-os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Ubuntu/Linux
+        - Windows
+        - Docker
+        - Other (specify in additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: environment-node
+    attributes:
+      label: Node.js Version
+      description: Output of `node --version`
+      placeholder: "v18.17.0"
+    validations:
+      required: true
+
+  - type: input
+    id: environment-npm
+    attributes:
+      label: Package Version
+      description: Version of whatsapp-mcp-server you're using
+      placeholder: "2.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-category
+    attributes:
+      label: Issue Category
+      options:
+        - WhatsApp Authentication
+        - Message Sending
+        - Audio/TTS
+        - MCP Integration
+        - Installation/Setup
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration
+      description: Share relevant configuration (remove sensitive info like API keys)
+      placeholder: |
+        Environment variables used:
+        WHATSAPP_SESSION_NAME=...
+        ELEVENLABS_API_KEY=***
+        
+        MCP configuration:
+        {...}
+      render: yaml
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or information about the problem
+      placeholder: Add any additional context here...

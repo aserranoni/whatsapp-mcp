@@ -3,6 +3,7 @@ const { Client, LocalAuth, MessageMedia } = pkg;
 
 type WhatsAppClient = InstanceType<typeof Client>;
 import path from 'path';
+import qrcode from 'qrcode-terminal';
 import fs from 'fs/promises';
 import { 
   AuthConfigManager, 

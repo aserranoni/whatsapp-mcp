@@ -1,6 +1,11 @@
 export default {
   preset: 'ts-jest/presets/default-esm',
   extensionsToTreatAsEsm: ['.ts'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+    },
+  },
   transform: {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
@@ -23,5 +28,7 @@ export default {
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testTimeout: 30000,
-  maxWorkers: 1, // WhatsApp tests should run sequentially
+  maxWorkers: 1,
+  silent: false,
+  verbose: true,
 };

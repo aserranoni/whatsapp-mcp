@@ -1,0 +1,83 @@
+version: 2
+
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "your-username"
+    assignees:
+      - "your-username"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated"
+    # Group patch and minor updates
+    groups:
+      patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      minor-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+      # Keep major updates separate for manual review
+      major-typescript:
+        patterns:
+          - "typescript"
+          - "@types/*"
+        update-types:
+          - "major"
+      major-testing:
+        patterns:
+          - "jest"
+          - "@types/jest"
+          - "ts-jest"
+        update-types:
+          - "major"
+    # Ignore specific packages that need manual updates
+    ignore:
+      # Ignore major version updates for critical dependencies
+      - dependency-name: "whatsapp-web.js"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@modelcontextprotocol/sdk"
+        update-types: ["version-update:semver-major"]
+    # Allow automatic merging of certain updates
+    target-branch: "develop"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:30"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "your-username"
+    assignees:
+      - "your-username"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "github-actions"
+      - "dependencies"
+      - "automated"
+    groups:
+      github-actions-updates:
+        patterns:
+          - "*"
