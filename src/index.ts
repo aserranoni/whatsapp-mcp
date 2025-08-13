@@ -122,10 +122,46 @@ const DownloadMediaSchema = z.object({
   savePath: z.string().optional().describe('Custom path to save media (optional)'),
 });
 
+// Real-time monitoring and webhook schemas
+const SubscribeToMessagesSchema = z.object({
+  chatIds: z.array(z.string()).optional().describe('Array of chat IDs to monitor (all if not specified)'),
+  messageTypes: z.array(z.string()).optional().describe('Array of message types to monitor'),
+  callback: z.string().optional().describe('Webhook URL for notifications'),
+});
+
+const SetMessageWebhookSchema = z.object({
+  url: z.string().url().describe('Webhook URL for message notifications'),
+  events: z.array(z.string()).default(['message']).describe('Array of events to monitor'),
+  secret: z.string().optional().describe('Secret for webhook authentication'),
+});
+
+const SetAutoResponseSchema = z.object({
+  rules: z.array(z.object({
+    trigger: z.string().describe('Text trigger for auto-response'),
+    response: z.string().describe('Automatic response text'),
+    chatIds: z.array(z.string()).optional().describe('Specific chats to apply this rule (all if not specified)'),
+    isRegex: z.boolean().default(false).describe('Whether trigger is a regex pattern'),
+    caseSensitive: z.boolean().default(false).describe('Whether trigger matching is case-sensitive'),
+  })).describe('Array of auto-response rules'),
+});
+
+const GetTypingStatusSchema = z.object({
+  chatId: z.string().describe('Chat ID to check typing status'),
+});
+
+const MonitorOnlineStatusSchema = z.object({
+  contactIds: z.array(z.string()).describe('Array of contact IDs to monitor'),
+});
+
 class WhatsAppMcpServer {
   private server: Server;
   private whatsappClient: WhatsAppClientWrapper | null = null;
   private ttsIntegration: TTSIntegration;
+  private webhookUrl: string | null = null;
+  private webhookSecret: string | null = null;
+  private autoResponseRules: any[] = [];
+  private subscriptions: Map<string, any> = new Map();
+  private monitoredContacts: Set<string> = new Set();
 
   constructor() {
     this.server = new Server(
@@ -306,6 +342,31 @@ class WhatsAppMcpServer {
             description: 'Download media from a message',
             inputSchema: DownloadMediaSchema,
           },
+          {
+            name: 'subscribe_to_messages',
+            description: 'Subscribe to real-time message updates',
+            inputSchema: SubscribeToMessagesSchema,
+          },
+          {
+            name: 'set_message_webhook',
+            description: 'Configure webhook for new messages',
+            inputSchema: SetMessageWebhookSchema,
+          },
+          {
+            name: 'set_auto_response',
+            description: 'Configure automatic message responses',
+            inputSchema: SetAutoResponseSchema,
+          },
+          {
+            name: 'get_typing_status',
+            description: 'Get current typing status for chats',
+            inputSchema: GetTypingStatusSchema,
+          },
+          {
+            name: 'monitor_online_status',
+            description: 'Monitor contact online status',
+            inputSchema: MonitorOnlineStatusSchema,
+          },
         ],
       };
     });
@@ -386,6 +447,26 @@ class WhatsAppMcpServer {
           case 'download_media':
             const downloadParams = DownloadMediaSchema.parse(args);
             return await this.downloadMedia(downloadParams);
+
+          case 'subscribe_to_messages':
+            const subscribeParams = SubscribeToMessagesSchema.parse(args);
+            return await this.subscribeToMessages(subscribeParams);
+
+          case 'set_message_webhook':
+            const webhookParams = SetMessageWebhookSchema.parse(args);
+            return await this.setMessageWebhook(webhookParams);
+
+          case 'set_auto_response':
+            const autoResponseParams = SetAutoResponseSchema.parse(args);
+            return await this.setAutoResponse(autoResponseParams);
+
+          case 'get_typing_status':
+            const typingParams = GetTypingStatusSchema.parse(args);
+            return await this.getTypingStatus(typingParams);
+
+          case 'monitor_online_status':
+            const onlineParams = MonitorOnlineStatusSchema.parse(args);
+            return await this.monitorOnlineStatus(onlineParams);
 
           default:
             throw new McpError(
@@ -1127,6 +1208,326 @@ class WhatsAppMcpServer {
         }],
         isError: true,
       };
+    }
+  }
+
+  private async subscribeToMessages(params: z.infer<typeof SubscribeToMessagesSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    if (!messageHandler) {
+      throw new McpError(ErrorCode.InternalError, 'Message receiving not enabled');
+    }
+
+    try {
+      const subscriptionId = `sub_${Date.now()}`;
+      
+      const subscription = {
+        id: subscriptionId,
+        chatIds: params.chatIds || [],
+        messageTypes: params.messageTypes || [],
+        callback: params.callback,
+        createdAt: new Date()
+      };
+
+      this.subscriptions.set(subscriptionId, subscription);
+
+      // Set up event listeners based on subscription
+      if (params.messageTypes?.includes('text') || !params.messageTypes) {
+        messageHandler.onTextMessage((message) => {
+          this.handleSubscriptionEvent(subscriptionId, 'text_message', message);
+        });
+      }
+
+      if (params.messageTypes?.includes('media') || !params.messageTypes) {
+        messageHandler.onMediaMessage((message) => {
+          this.handleSubscriptionEvent(subscriptionId, 'media_message', message);
+        });
+      }
+
+      if (params.messageTypes?.includes('group') || !params.messageTypes) {
+        messageHandler.onGroupMessage((message) => {
+          this.handleSubscriptionEvent(subscriptionId, 'group_message', message);
+        });
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            subscriptionId,
+            message: 'Successfully subscribed to message updates',
+            subscription
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to subscribe to messages: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async setMessageWebhook(params: z.infer<typeof SetMessageWebhookSchema>): Promise<CallToolResult> {
+    try {
+      this.webhookUrl = params.url;
+      this.webhookSecret = params.secret || null;
+
+      // Test webhook by sending a ping
+      if (this.webhookUrl) {
+        try {
+          const testPayload = {
+            type: 'webhook_test',
+            timestamp: new Date().toISOString(),
+            message: 'WhatsApp MCP webhook configured successfully'
+          };
+
+          await this.sendWebhook(testPayload);
+        } catch (webhookError) {
+          console.warn('Webhook test failed:', webhookError);
+        }
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            webhookUrl: this.webhookUrl,
+            events: params.events,
+            hasSecret: !!this.webhookSecret,
+            message: 'Webhook configured successfully'
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to set webhook: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async setAutoResponse(params: z.infer<typeof SetAutoResponseSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    if (!messageHandler) {
+      throw new McpError(ErrorCode.InternalError, 'Message receiving not enabled');
+    }
+
+    try {
+      this.autoResponseRules = params.rules;
+
+      // Set up auto-response listener
+      messageHandler.onMessage(async (message) => {
+        await this.handleAutoResponse(message);
+      });
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            rulesCount: this.autoResponseRules.length,
+            rules: this.autoResponseRules,
+            message: 'Auto-response rules configured successfully'
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to set auto-response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async getTypingStatus(params: z.infer<typeof GetTypingStatusSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    try {
+      // Note: WhatsApp Web.js has limited typing status support
+      // This is a basic implementation
+      const chat = await this.whatsappClient.getChatById(params.chatId);
+      
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            chatId: params.chatId,
+            isTyping: false, // WhatsApp Web.js doesn't provide real-time typing status
+            note: 'Typing status monitoring is limited in WhatsApp Web.js',
+            lastSeen: chat ? 'Available through chat.lastSeen if contact allows' : 'Chat not found'
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to get typing status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async monitorOnlineStatus(params: z.infer<typeof MonitorOnlineStatusSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    try {
+      // Add contacts to monitoring set
+      params.contactIds.forEach(id => this.monitoredContacts.add(id));
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            monitoredContacts: Array.from(this.monitoredContacts),
+            note: 'Online status monitoring is limited in WhatsApp Web.js. Real presence updates may not be available.',
+            totalMonitored: this.monitoredContacts.size
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to monitor online status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  // Helper methods for webhook and auto-response functionality
+  private async handleSubscriptionEvent(subscriptionId: string, eventType: string, message: any): Promise<void> {
+    const subscription = this.subscriptions.get(subscriptionId);
+    if (!subscription) return;
+
+    // Check if message matches subscription filters
+    if (subscription.chatIds.length > 0 && 
+        !subscription.chatIds.includes(message.from) && 
+        !subscription.chatIds.includes(message.to)) {
+      return;
+    }
+
+    // Send webhook notification if configured
+    if (subscription.callback || this.webhookUrl) {
+      const payload = {
+        subscriptionId,
+        eventType,
+        message: {
+          id: message.id,
+          from: message.from,
+          to: message.to,
+          body: message.body,
+          type: message.type,
+          timestamp: message.timestamp,
+          isGroup: message.isGroup
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      try {
+        await this.sendWebhook(payload, subscription.callback);
+      } catch (error) {
+        console.error('Failed to send webhook:', error);
+      }
+    }
+  }
+
+  private async handleAutoResponse(message: IncomingMessage): Promise<void> {
+    if (!this.whatsappClient || !message.body) return;
+
+    for (const rule of this.autoResponseRules) {
+      // Check if rule applies to this chat
+      if (rule.chatIds && rule.chatIds.length > 0) {
+        if (!rule.chatIds.includes(message.from) && !rule.chatIds.includes(message.to)) {
+          continue;
+        }
+      }
+
+      // Check if message matches trigger
+      let matches = false;
+      if (rule.isRegex) {
+        const regex = new RegExp(rule.trigger, rule.caseSensitive ? 'g' : 'gi');
+        matches = regex.test(message.body);
+      } else {
+        const messageText = rule.caseSensitive ? message.body : message.body.toLowerCase();
+        const trigger = rule.caseSensitive ? rule.trigger : rule.trigger.toLowerCase();
+        matches = messageText.includes(trigger);
+      }
+
+      if (matches) {
+        try {
+          // Send auto-response
+          await this.whatsappClient.sendTextMessage({
+            chatId: message.from,
+            text: rule.response
+          });
+          
+          console.log(`Auto-response sent to ${message.from}: ${rule.response}`);
+          break; // Only respond with the first matching rule
+        } catch (error) {
+          console.error('Failed to send auto-response:', error);
+        }
+      }
+    }
+  }
+
+  private async sendWebhook(payload: any, customUrl?: string): Promise<void> {
+    const url = customUrl || this.webhookUrl;
+    if (!url) return;
+
+    try {
+      const headers: any = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'WhatsApp-MCP-Server/1.0.0'
+      };
+
+      if (this.webhookSecret) {
+        const crypto = await import('crypto');
+        const signature = crypto
+          .createHmac('sha256', this.webhookSecret)
+          .update(JSON.stringify(payload))
+          .digest('hex');
+        headers['X-WhatsApp-Signature'] = `sha256=${signature}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook failed with status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Webhook delivery failed:', error);
+      throw error;
     }
   }
 
