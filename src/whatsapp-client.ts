@@ -10,8 +10,10 @@ import type {
   AudioMessage, 
   TextMessage, 
   WhatsAppClientStatus, 
-  Contact 
+  Contact,
+  MessageHandlerConfig
 } from './types.js';
+import { MessageHandler } from './handlers/message-handler.js';
 
 export class WhatsAppClientWrapper {
   private client: WhatsAppClient;
@@ -20,6 +22,7 @@ export class WhatsAppClientWrapper {
   private lastError: string | null = null;
   private phoneNumber: string | null = null;
   private lastConnected: Date | null = null;
+  private messageHandler: MessageHandler | null = null;
 
   constructor(config: WhatsAppConfig) {
     this.config = config;
@@ -80,8 +83,16 @@ export class WhatsAppClientWrapper {
       this.lastError = `Disconnected: ${reason}`;
     });
 
-    this.client.on('message', (message: any) => {
-      // Handle incoming messages if needed
+    this.client.on('message', async (message: any) => {
+      // Process message through handler if configured
+      if (this.messageHandler) {
+        try {
+          await this.messageHandler.processMessage(message);
+        } catch (error) {
+          console.error('Error processing message:', error);
+        }
+      }
+      // Keep basic logging for now
       console.log(`Received message from ${message.from}: ${message.body}`);
     });
   }
@@ -218,5 +229,30 @@ export class WhatsAppClientWrapper {
       await this.client.destroy();
     }
     this.isReady = false;
+  }
+
+  // Message handler configuration methods
+  configureMessageHandler(config: MessageHandlerConfig): void {
+    this.messageHandler = new MessageHandler(config);
+  }
+
+  getMessageHandler(): MessageHandler | null {
+    return this.messageHandler;
+  }
+
+  enableMessageReceiving(config?: MessageHandlerConfig): void {
+    if (!this.messageHandler) {
+      const defaultConfig: MessageHandlerConfig = {
+        rateLimitPerMinute: config?.rateLimitPerMinute ?? 60,
+        enableStorage: config?.enableStorage ?? true,
+        enableWebhooks: config?.enableWebhooks ?? false,
+        maxQueueSize: config?.maxQueueSize ?? 1000
+      };
+      this.configureMessageHandler(defaultConfig);
+    }
+  }
+
+  disableMessageReceiving(): void {
+    this.messageHandler = null;
   }
 }
