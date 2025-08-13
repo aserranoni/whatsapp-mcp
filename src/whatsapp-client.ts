@@ -255,4 +255,140 @@ export class WhatsAppClientWrapper {
   disableMessageReceiving(): void {
     this.messageHandler = null;
   }
+
+  // Advanced message interaction methods
+  async reactToMessage(messageId: string, emoji: string): Promise<void> {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+
+    try {
+      const message = await this.client.getMessageById(messageId);
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+      
+      await message.react(emoji);
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : 'Unknown error';
+      throw error;
+    }
+  }
+
+  async replyToMessage(messageId: string, text: string, mentionAuthor: boolean = true): Promise<void> {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+
+    try {
+      const message = await this.client.getMessageById(messageId);
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+
+      let replyText = text;
+      if (mentionAuthor && message.from && !message.from.includes('@g.us')) {
+        // Add mention for direct messages
+        replyText = `@${message.from.split('@')[0]} ${text}`;
+      }
+
+      await message.reply(replyText);
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : 'Unknown error';
+      throw error;
+    }
+  }
+
+  async forwardMessage(messageId: string, toChatId: string): Promise<void> {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+
+    try {
+      const message = await this.client.getMessageById(messageId);
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+
+      await message.forward(toChatId);
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : 'Unknown error';
+      throw error;
+    }
+  }
+
+  async deleteMessage(messageId: string, forEveryone: boolean = false): Promise<void> {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+
+    try {
+      const message = await this.client.getMessageById(messageId);
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+
+      await message.delete(forEveryone);
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : 'Unknown error';
+      throw error;
+    }
+  }
+
+  async downloadMedia(messageId: string, savePath?: string): Promise<string> {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+
+    try {
+      const message = await this.client.getMessageById(messageId);
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+
+      if (!message.hasMedia) {
+        throw new Error('Message does not contain media');
+      }
+
+      const media = await message.downloadMedia();
+      
+      if (savePath) {
+        // Save to specified path
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        
+        // Ensure directory exists
+        await fs.mkdir(path.dirname(savePath), { recursive: true });
+        
+        // Decode base64 and save
+        const buffer = Buffer.from(media.data, 'base64');
+        await fs.writeFile(savePath, buffer);
+        
+        return savePath;
+      } else {
+        // Return data URI
+        return `data:${media.mimetype};base64,${media.data}`;
+      }
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : 'Unknown error';
+      throw error;
+    }
+  }
+
+  async markChatAsRead(chatId: string): Promise<void> {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+
+    try {
+      const chat = await this.getChatById(chatId);
+      if (chat) {
+        // Mark all messages in chat as seen/read
+        await chat.sendSeen();
+      }
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : 'Unknown error';
+      throw error;
+    }
+  }
 }

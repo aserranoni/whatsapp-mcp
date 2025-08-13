@@ -90,6 +90,38 @@ const GetUnreadMessagesSchema = z.object({
   markAsRead: z.boolean().default(false).describe('Mark messages as read after retrieval'),
 });
 
+// Advanced message interaction schemas
+const MarkAsReadSchema = z.object({
+  messageIds: z.array(z.string()).optional().describe('Array of message IDs to mark as read'),
+  chatId: z.string().optional().describe('Mark all messages in this chat as read'),
+});
+
+const ReactToMessageSchema = z.object({
+  messageId: z.string().describe('Message ID to react to'),
+  emoji: z.string().describe('Emoji reaction (e.g., 👍, ❤️, 😄)'),
+});
+
+const ReplyToMessageSchema = z.object({
+  messageId: z.string().describe('Message ID to reply to'),
+  text: z.string().describe('Reply text'),
+  mentionAuthor: z.boolean().default(true).describe('Whether to mention the original author'),
+});
+
+const ForwardMessageSchema = z.object({
+  messageId: z.string().describe('Message ID to forward'),
+  toChatId: z.string().describe('Chat ID to forward the message to'),
+});
+
+const DeleteMessageSchema = z.object({
+  messageId: z.string().describe('Message ID to delete'),
+  forEveryone: z.boolean().default(false).describe('Delete for everyone (if possible)'),
+});
+
+const DownloadMediaSchema = z.object({
+  messageId: z.string().describe('Message ID containing media to download'),
+  savePath: z.string().optional().describe('Custom path to save media (optional)'),
+});
+
 class WhatsAppMcpServer {
   private server: Server;
   private whatsappClient: WhatsAppClientWrapper | null = null;
@@ -244,6 +276,36 @@ class WhatsAppMcpServer {
             description: 'Fetch all unread messages',
             inputSchema: GetUnreadMessagesSchema,
           },
+          {
+            name: 'mark_as_read',
+            description: 'Mark messages as read',
+            inputSchema: MarkAsReadSchema,
+          },
+          {
+            name: 'react_to_message',
+            description: 'Add emoji reaction to a message',
+            inputSchema: ReactToMessageSchema,
+          },
+          {
+            name: 'reply_to_message',
+            description: 'Reply to a specific message with quote',
+            inputSchema: ReplyToMessageSchema,
+          },
+          {
+            name: 'forward_message',
+            description: 'Forward a message to another chat',
+            inputSchema: ForwardMessageSchema,
+          },
+          {
+            name: 'delete_message',
+            description: 'Delete a message',
+            inputSchema: DeleteMessageSchema,
+          },
+          {
+            name: 'download_media',
+            description: 'Download media from a message',
+            inputSchema: DownloadMediaSchema,
+          },
         ],
       };
     });
@@ -300,6 +362,30 @@ class WhatsAppMcpServer {
           case 'get_unread_messages':
             const unreadParams = GetUnreadMessagesSchema.parse(args);
             return await this.getUnreadMessages(unreadParams);
+
+          case 'mark_as_read':
+            const markReadParams = MarkAsReadSchema.parse(args);
+            return await this.markAsRead(markReadParams);
+
+          case 'react_to_message':
+            const reactParams = ReactToMessageSchema.parse(args);
+            return await this.reactToMessage(reactParams);
+
+          case 'reply_to_message':
+            const replyParams = ReplyToMessageSchema.parse(args);
+            return await this.replyToMessage(replyParams);
+
+          case 'forward_message':
+            const forwardParams = ForwardMessageSchema.parse(args);
+            return await this.forwardMessage(forwardParams);
+
+          case 'delete_message':
+            const deleteParams = DeleteMessageSchema.parse(args);
+            return await this.deleteMessage(deleteParams);
+
+          case 'download_media':
+            const downloadParams = DownloadMediaSchema.parse(args);
+            return await this.downloadMedia(downloadParams);
 
           default:
             throw new McpError(
@@ -865,6 +951,179 @@ class WhatsAppMcpServer {
         content: [{
           type: 'text',
           text: `Failed to retrieve unread messages: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async markAsRead(params: z.infer<typeof MarkAsReadSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    
+    try {
+      let markedCount = 0;
+
+      if (params.messageIds && params.messageIds.length > 0) {
+        // Mark specific messages as read
+        if (messageHandler) {
+          markedCount = messageHandler.markMultipleAsRead(params.messageIds);
+        }
+      } else if (params.chatId) {
+        // Mark entire chat as read
+        await this.whatsappClient.markChatAsRead(params.chatId);
+        markedCount = 1; // Represent chat-level operation
+      } else {
+        throw new Error('Either messageIds or chatId must be provided');
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully marked ${markedCount} ${params.chatId ? 'chat' : 'messages'} as read`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to mark as read: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async reactToMessage(params: z.infer<typeof ReactToMessageSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    try {
+      await this.whatsappClient.reactToMessage(params.messageId, params.emoji);
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully reacted with ${params.emoji} to message ${params.messageId}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to react to message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async replyToMessage(params: z.infer<typeof ReplyToMessageSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    try {
+      await this.whatsappClient.replyToMessage(params.messageId, params.text, params.mentionAuthor);
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully replied to message ${params.messageId}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to reply to message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async forwardMessage(params: z.infer<typeof ForwardMessageSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    try {
+      await this.whatsappClient.forwardMessage(params.messageId, params.toChatId);
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully forwarded message ${params.messageId} to ${params.toChatId}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to forward message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async deleteMessage(params: z.infer<typeof DeleteMessageSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    try {
+      await this.whatsappClient.deleteMessage(params.messageId, params.forEveryone);
+
+      const deleteType = params.forEveryone ? 'for everyone' : 'for me';
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully deleted message ${params.messageId} ${deleteType}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to delete message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async downloadMedia(params: z.infer<typeof DownloadMediaSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    try {
+      const result = await this.whatsappClient.downloadMedia(params.messageId, params.savePath);
+
+      const isDataUri = result.startsWith('data:');
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            messageId: params.messageId,
+            success: true,
+            result: isDataUri ? 'Media returned as base64 data URI' : `Media saved to ${result}`,
+            dataUri: isDataUri ? result : undefined,
+            filePath: !isDataUri ? result : undefined
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to download media: ${error instanceof Error ? error.message : 'Unknown error'}`,
         }],
         isError: true,
       };
