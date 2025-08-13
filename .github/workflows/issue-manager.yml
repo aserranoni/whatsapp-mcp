@@ -174,27 +174,22 @@ jobs:
             if (userIssues.length === 1) {
               console.log('👋 First-time contributor detected');
               
-              const welcomeMessage = `👋 **Welcome to the WhatsApp MCP Server project!**
-
-Thank you for opening your first issue, @${author}! We appreciate your interest in the project.
-
-### 📚 Getting Started
-- Make sure you've read our [README](https://github.com/${context.repo.owner}/${context.repo.repo}#readme)
-- Check out the [documentation](https://github.com/${context.repo.owner}/${context.repo.repo}/tree/main/docs)
-- Join our [discussions](https://github.com/${context.repo.owner}/${context.repo.repo}/discussions) for community support
-
-### 🤝 Contributing
-If you're interested in contributing:
-- Check out our [contributing guidelines](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CONTRIBUTING.md)
-- Look for issues labeled \`good first issue\` or \`help wanted\`
-- Feel free to ask questions in the discussions
-
-### ⏰ What's Next?
-- Our team will review your issue soon
-- You can help by providing more details if requested
-- Follow the issue for updates
-
-Thanks for helping make this project better! 🚀`;
+              const welcomeMessage = "👋 **Welcome to the WhatsApp MCP Server project!**\n\n" +
+                "Thank you for opening your first issue, @" + author + "! We appreciate your interest in the project.\n\n" +
+                "### 📚 Getting Started\n" +
+                "- Make sure you've read our [README](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "#readme)\n" +
+                "- Check out the [documentation](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/tree/main/docs)\n" +
+                "- Join our [discussions](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/discussions) for community support\n\n" +
+                "### 🤝 Contributing\n" +
+                "If you're interested in contributing:\n" +
+                "- Check out our [contributing guidelines](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/blob/main/CONTRIBUTING.md)\n" +
+                "- Look for issues labeled `good first issue` or `help wanted`\n" +
+                "- Feel free to ask questions in the discussions\n\n" +
+                "### ⏰ What's Next?\n" +
+                "- Our team will review your issue soon\n" +
+                "- You can help by providing more details if requested\n" +
+                "- Follow the issue for updates\n\n" +
+                "Thanks for helping make this project better! 🚀";
 
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -475,20 +470,16 @@ Thanks for helping make this project better! 🚀`;
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: issue.number,
-                  body: `🔒 **Auto-closing stale issue**
-
-This issue has been automatically closed due to inactivity. 
-
-**Why was this closed?**
-- No activity for ${staleAfterDays + closeAfterDays} days
-- Marked as stale with no follow-up
-
-**Need to reopen?**
-- Comment on this issue or create a new one
-- Provide updated information if the issue persists
-- Reference this issue number: #${issue.number}
-
-Thank you for your contribution! 🙏`
+                  body: "🔒 **Auto-closing stale issue**\n\n" +
+                    "This issue has been automatically closed due to inactivity.\n\n" +
+                    "**Why was this closed?**\n" +
+                    "- No activity for " + (staleAfterDays + closeAfterDays) + " days\n" +
+                    "- Marked as stale with no follow-up\n\n" +
+                    "**Need to reopen?**\n" +
+                    "- Comment on this issue or create a new one\n" +
+                    "- Provide updated information if the issue persists\n" +
+                    "- Reference this issue number: #" + issue.number + "\n\n" +
+                    "Thank you for your contribution! 🙏"
                 });
                 
                 await github.rest.issues.update({
@@ -514,21 +505,17 @@ Thank you for your contribution! 🙏`
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: issue.number,
-                  body: `⏰ **This issue has been marked as stale**
-
-This issue hasn't had any activity for ${staleAfterDays} days and will be automatically closed in ${closeAfterDays} days if no further activity occurs.
-
-**To keep this issue active:**
-- Add a comment with updates or progress
-- Add relevant labels or assignees  
-- Reference it in related PRs or issues
-
-**If this issue is still relevant:**
-- Please comment to let us know
-- Provide any additional context
-- Update the description if needed
-
-The stale label will be removed automatically once there's new activity.`
+                  body: "⏰ **This issue has been marked as stale**\n\n" +
+                    "This issue hasn't had any activity for " + staleAfterDays + " days and will be automatically closed in " + closeAfterDays + " days if no further activity occurs.\n\n" +
+                    "**To keep this issue active:**\n" +
+                    "- Add a comment with updates or progress\n" +
+                    "- Add relevant labels or assignees\n" +
+                    "- Reference it in related PRs or issues\n\n" +
+                    "**If this issue is still relevant:**\n" +
+                    "- Please comment to let us know\n" +
+                    "- Provide any additional context\n" +
+                    "- Update the description if needed\n\n" +
+                    "The stale label will be removed automatically once there's new activity."
                 });
               }
             }
@@ -604,28 +591,23 @@ The stale label will be removed automatically once there's new activity.`
             ).length;
             
             // Create metrics summary
-            const metrics = `## 📊 Issue Metrics (Last 30 Days)
-
-### 📈 Overview
-- **Total Issues**: ${totalIssues}
-- **Open Issues**: ${openIssues}
-- **Closed Issues**: ${closedIssues}
-- **Close Rate**: ${totalIssues > 0 ? Math.round((closedIssues / totalIssues) * 100) : 0}%
-
-### ⏱️ Response Time
-- **Average First Response**: ${avgResponseTime} hours
-
-### 🏷️ Issue Types
-- **Bug Reports**: ${bugReports}
-- **Feature Requests**: ${featureRequests}
-- **Questions**: ${questions}
-- **Other**: ${totalIssues - bugReports - featureRequests - questions}
-
-### 📅 Generated
-${new Date().toISOString().split('T')[0]} UTC
-
----
-*This report is automatically generated daily.*`;
+            const metrics = "## 📊 Issue Metrics (Last 30 Days)\n\n" +
+              "### 📈 Overview\n" +
+              "- **Total Issues**: " + totalIssues + "\n" +
+              "- **Open Issues**: " + openIssues + "\n" +
+              "- **Closed Issues**: " + closedIssues + "\n" +
+              "- **Close Rate**: " + (totalIssues > 0 ? Math.round((closedIssues / totalIssues) * 100) : 0) + "%\n\n" +
+              "### ⏱️ Response Time\n" +
+              "- **Average First Response**: " + avgResponseTime + " hours\n\n" +
+              "### 🏷️ Issue Types\n" +
+              "- **Bug Reports**: " + bugReports + "\n" +
+              "- **Feature Requests**: " + featureRequests + "\n" +
+              "- **Questions**: " + questions + "\n" +
+              "- **Other**: " + (totalIssues - bugReports - featureRequests - questions) + "\n\n" +
+              "### 📅 Generated\n" +
+              new Date().toISOString().split('T')[0] + " UTC\n\n" +
+              "---\n" +
+              "*This report is automatically generated daily.*";
 
             console.log(metrics);
             

@@ -337,29 +337,23 @@ jobs:
             const needsChangelog = hasSourceChanges && isFeatureOrFix && !pr.draft;
             
             if (needsChangelog && !hasChangelogUpdate) {
-              const comment = `## 📝 Changelog Update Needed
-              
-This PR appears to introduce changes that should be documented in the changelog.
-
-**Why is this needed?**
-- Source code changes detected in \`src/\`
-- PR title suggests a feature or bug fix
-- Users benefit from knowing about changes
-
-**How to add a changelog entry:**
-1. Add an entry to \`CHANGELOG.md\` under the \`## [Unreleased]\` section
-2. Use the format: \`- ${pr.title} (#${pr.number})\`
-3. Place it under the appropriate subsection (Added, Changed, Fixed, etc.)
-
-**Example:**
-\`\`\`markdown
-## [Unreleased]
-
-### Added
-- ${pr.title} (#${pr.number})
-\`\`\`
-
-*This check can be skipped for internal changes, documentation, or tests.*`;
+              const comment = "## 📝 Changelog Update Needed\n\n" +
+                "This PR appears to introduce changes that should be documented in the changelog.\n\n" +
+                "**Why is this needed?**\n" +
+                "- Source code changes detected in `src/`\n" +
+                "- PR title suggests a feature or bug fix\n" +
+                "- Users benefit from knowing about changes\n\n" +
+                "**How to add a changelog entry:**\n" +
+                "1. Add an entry to `CHANGELOG.md` under the `## [Unreleased]` section\n" +
+                "2. Use the format: `- " + pr.title + " (#" + pr.number + ")`\n" +
+                "3. Place it under the appropriate subsection (Added, Changed, Fixed, etc.)\n\n" +
+                "**Example:**\n" +
+                "```markdown\n" +
+                "## [Unreleased]\n\n" +
+                "### Added\n" +
+                "- " + pr.title + " (#" + pr.number + ")\n" +
+                "```\n\n" +
+                "*This check can be skipped for internal changes, documentation, or tests.*";
 
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -431,21 +425,17 @@ This PR appears to introduce changes that should be documented in the changelog.
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       issue_number: pr.number,
-                      body: `⏰ **Gentle Review Reminder**
-
-This PR has been ready for review for 24 hours. 
-
-**For reviewers:**
-- Please take a moment to review when convenient
-- Check the [review checklist](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/.github/PULL_REQUEST_TEMPLATE.md#checklist) 
-- Leave comments or approve/request changes
-
-**For the author:**
-- Ensure all CI checks are passing
-- Consider if any additional context would help reviewers
-- Ping specific reviewers if urgent
-
-Thank you for your patience! 🙏`
+                      body: "⏰ **Gentle Review Reminder**\n\n" +
+                        "This PR has been ready for review for 24 hours.\n\n" +
+                        "**For reviewers:**\n" +
+                        "- Please take a moment to review when convenient\n" +
+                        "- Check the [review checklist](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/blob/main/.github/PULL_REQUEST_TEMPLATE.md#checklist)\n" +
+                        "- Leave comments or approve/request changes\n\n" +
+                        "**For the author:**\n" +
+                        "- Ensure all CI checks are passing\n" +
+                        "- Consider if any additional context would help reviewers\n" +
+                        "- Ping specific reviewers if urgent\n\n" +
+                        "Thank you for your patience! 🙏"
                     });
                   }
                 }
@@ -524,16 +514,14 @@ Thank you for your patience! 🙏`
             // Could store these metrics in a database or file for analysis
             // For now, just log them
             
-            core.summary.addRaw(`## 📊 PR #${pr.number} Metrics
-            
-- **Time to Merge**: ${timeToMerge} hours
-- **Time to First Review**: ${timeToFirstReview || 'No reviews'} ${timeToFirstReview ? 'hours' : ''}
-- **Reviews**: ${reviews.length}
-- **Commits**: ${commits.length}  
-- **Files Changed**: ${files.length}
-- **Lines**: +${pr.additions}/-${pr.deletions}
-- **Author**: ${pr.user.login}
-
-*These metrics help us improve our development process.*`);
+            core.summary.addRaw("## 📊 PR #" + pr.number + " Metrics\n\n" +
+              "- **Time to Merge**: " + timeToMerge + " hours\n" +
+              "- **Time to First Review**: " + (timeToFirstReview || 'No reviews') + " " + (timeToFirstReview ? 'hours' : '') + "\n" +
+              "- **Reviews**: " + reviews.length + "\n" +
+              "- **Commits**: " + commits.length + "\n" +
+              "- **Files Changed**: " + files.length + "\n" +
+              "- **Lines**: +" + pr.additions + "/-" + pr.deletions + "\n" +
+              "- **Author**: " + pr.user.login + "\n\n" +
+              "*These metrics help us improve our development process.*");
             
             await core.summary.write();

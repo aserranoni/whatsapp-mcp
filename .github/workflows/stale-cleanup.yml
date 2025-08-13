@@ -101,7 +101,6 @@ jobs:
           remove-stale-when-updated: true
           
           # Don't close issues, just mark as stale initially
-          days-before-close: ${{ github.event.inputs.days_before_close || '7' }}
           
           # Enable debug logging
           debug-only: ${{ github.event.inputs.dry_run == 'true' }}
@@ -239,31 +238,26 @@ jobs:
             });
             
             // Generate summary
-            const summary = `## 🧹 Stale Cleanup Summary
-            
-### 📊 Current Status
-- **Stale Issues**: ${issues.length}
-- **Stale PRs**: ${prs.length}
-- **Auto-closed This Week**: ${autoClosedThisWeek.length}
-
-### ⚙️ Configuration
-- **Mark as Stale After**: ${daysBeforeStale} days
-- **Close After Stale For**: ${daysBeforeClose} days  
-- **Total Days Before Auto-close**: ${parseInt(daysBeforeStale) + parseInt(daysBeforeClose)} days
-- **Dry Run Mode**: ${isDryRun ? '✅ Yes (no changes made)' : '❌ No (changes applied)'}
-
-### 🎯 Next Actions
-${issues.length > 10 ? '⚠️ High number of stale issues - consider reviewing project priorities' : '✅ Stale issue count is manageable'}
-${prs.length > 5 ? '⚠️ Several stale PRs - consider reaching out to contributors' : '✅ Stale PR count is reasonable'}
-
-### 🔗 Useful Links
-- [View all stale issues](https://github.com/${context.repo.owner}/${context.repo.repo}/issues?q=is%3Aopen+label%3A%22status%3A+stale%22)
-- [View all stale PRs](https://github.com/${context.repo.owner}/${context.repo.repo}/pulls?q=is%3Aopen+label%3A%22status%3A+stale%22)
-- [Recently closed items](https://github.com/${context.repo.owner}/${context.repo.repo}/issues?q=is%3Aclosed+closed%3A%3E${sevenDaysAgo.toISOString().split('T')[0]})
-
----
-📅 Generated: ${new Date().toUTCString()}
-🤖 Run ID: ${{ github.run_id }}`;
+            const summary = "## 🧹 Stale Cleanup Summary\n\n" +
+              "### 📊 Current Status\n" +
+              "- **Stale Issues**: " + issues.length + "\n" +
+              "- **Stale PRs**: " + prs.length + "\n" +
+              "- **Auto-closed This Week**: " + autoClosedThisWeek.length + "\n\n" +
+              "### ⚙️ Configuration\n" +
+              "- **Mark as Stale After**: " + daysBeforeStale + " days\n" +
+              "- **Close After Stale For**: " + daysBeforeClose + " days\n" +
+              "- **Total Days Before Auto-close**: " + (parseInt(daysBeforeStale) + parseInt(daysBeforeClose)) + " days\n" +
+              "- **Dry Run Mode**: " + (isDryRun ? "✅ Yes (no changes made)" : "❌ No (changes applied)") + "\n\n" +
+              "### 🎯 Next Actions\n" +
+              (issues.length > 10 ? "⚠️ High number of stale issues - consider reviewing project priorities" : "✅ Stale issue count is manageable") + "\n" +
+              (prs.length > 5 ? "⚠️ Several stale PRs - consider reaching out to contributors" : "✅ Stale PR count is reasonable") + "\n\n" +
+              "### 🔗 Useful Links\n" +
+              "- [View all stale issues](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/issues?q=is%3Aopen+label%3A%22status%3A+stale%22)\n" +
+              "- [View all stale PRs](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/pulls?q=is%3Aopen+label%3A%22status%3A+stale%22)\n" +
+              "- [Recently closed items](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/issues?q=is%3Aclosed+closed%3A%3E" + sevenDaysAgo.toISOString().split('T')[0] + ")\n\n" +
+              "---\n" +
+              "📅 Generated: " + new Date().toUTCString() + "\n" +
+              "🤖 Run ID: ${{ github.run_id }}";
 
             console.log(summary);
             
@@ -321,10 +315,8 @@ ${prs.length > 5 ? '⚠️ Several stale PRs - consider reaching out to contribu
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
-                body: `🔄 **Automatically reopened**
-                
-This ${itemType} has been reopened because @${commenter} added a comment.
-
-The \`status: stale\` label has been removed. Thank you for the follow-up! 🙏`
+                body: "🔄 **Automatically reopened**\n\n" +
+                  "This " + itemType + " has been reopened because @" + commenter + " added a comment.\n\n" +
+                  "The `status: stale` label has been removed. Thank you for the follow-up! 🙏"
               });
             }

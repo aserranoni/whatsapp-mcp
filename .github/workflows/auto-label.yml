@@ -234,26 +234,22 @@ jobs:
               });
               
               // Add a comment about the conflict
-              const body = `🚨 **Merge Conflict Detected**
-              
-This pull request has merge conflicts that need to be resolved before it can be merged.
-
-**To resolve conflicts:**
-1. Sync your branch with the latest changes from the base branch
-2. Resolve the conflicts in your local environment  
-3. Push the resolved changes
-
-**Commands to resolve:**
-\`\`\`bash
-git checkout ${pr.head.ref}
-git pull origin ${pr.base.ref}
-# Resolve conflicts in your editor
-git add .
-git commit -m "Resolve merge conflicts"
-git push origin ${pr.head.ref}
-\`\`\`
-
-The conflict status will be automatically updated once resolved.`;
+              const body = "🚨 **Merge Conflict Detected**\n\n" +
+                "This pull request has merge conflicts that need to be resolved before it can be merged.\n\n" +
+                "**To resolve conflicts:**\n" +
+                "1. Sync your branch with the latest changes from the base branch\n" +
+                "2. Resolve the conflicts in your local environment\n" +
+                "3. Push the resolved changes\n\n" +
+                "**Commands to resolve:**\n" +
+                "```bash\n" +
+                `git checkout ${pr.head.ref}\n` +
+                `git pull origin ${pr.base.ref}\n` +
+                "# Resolve conflicts in your editor\n" +
+                "git add .\n" +
+                'git commit -m "Resolve merge conflicts"\n' +
+                `git push origin ${pr.head.ref}\n` +
+                "```\n\n" +
+                "The conflict status will be automatically updated once resolved.";
 
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
