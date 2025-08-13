@@ -108,7 +108,8 @@ jobs:
 
             # Create HTML report directory with simple report
             mkdir -p type-coverage-report
-            echo "<h1>Type Coverage Report</h1><p>Coverage: $COVERAGE</p><pre>$(cat type-coverage-report.txt)</pre>" > type-coverage-report/index.html
+            echo "<h1>Type Coverage Report</h1><p>Coverage: $COVERAGE</p>" > type-coverage-report/index.html
+            echo "<pre>$(cat type-coverage-report.txt)</pre>" >> type-coverage-report/index.html
 
             echo "type-coverage=$COVERAGE" >> $GITHUB_OUTPUT
           else
@@ -167,7 +168,8 @@ jobs:
 
               Object.keys(thresholds).forEach(key => {
                 if (total[key].pct < thresholds[key]) {
-                  console.log('❌ ' + key + ' coverage below threshold:', total[key].pct + '% < ' + thresholds[key] + '%');
+                  console.log('❌ ' + key + ' coverage below threshold:',
+                    total[key].pct + '% < ' + thresholds[key] + '%');
                   failed = true;
                 }
               });
@@ -227,7 +229,8 @@ jobs:
 
           # Generate complexity report using ESLint complexity rule
           echo "🔍 Running complexity analysis..."
-          npx eslint src/ --rule 'complexity: [2, 10]' --format json > complexity-report.json || echo "⚠️ Some complexity issues found"
+          npx eslint src/ --rule 'complexity: [2, 10]' --format json > complexity-report.json || \
+            echo "⚠️ Some complexity issues found"
 
           # Simple complexity check
           echo "📊 Complexity Summary:"
@@ -443,18 +446,18 @@ jobs:
           else
             echo "| Dependency Analysis | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Calculate overall quality score
           PASSED=0
           TOTAL=5
 
-          [[ "$LINTING_RESULT" == "success" ]] && ((PASSED++))
-          [[ "$TYPE_COVERAGE_RESULT" == "success" ]] && ((PASSED++))
-          [[ "$TEST_COVERAGE_RESULT" == "success" ]] && ((PASSED++))
-          [[ "$CODE_METRICS_RESULT" == "success" ]] && ((PASSED++))
-          [[ "$DEPENDENCY_ANALYSIS_RESULT" == "success" ]] && ((PASSED++))
+          if [[ "$LINTING_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$TYPE_COVERAGE_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$TEST_COVERAGE_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$CODE_METRICS_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$DEPENDENCY_ANALYSIS_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
 
           SCORE=$((PASSED * 100 / TOTAL))
 
