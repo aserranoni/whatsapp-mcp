@@ -68,7 +68,7 @@ jobs:
               '## Type of Change',
               '## Testing',
               '## Checklist'
-            ];
+           ];
 
             const usesTemplate = templateSections.some(section => body.includes(section));
             if (!usesTemplate && !isDraft) {
@@ -171,9 +171,9 @@ jobs:
               if (hasBreakingChanges) {
                 comment += '### 💥 Breaking Changes Detected\n';
                 comment += 'This PR contains breaking changes. Please ensure:\n';
-                comment += '- [ ] Version is bumped appropriately\n';
-                comment += '- [ ] Migration guide is updated\n';
-                comment += '- [ ] Changelog includes breaking change notes\n\n';
+                comment += '- [] Version is bumped appropriately\n';
+                comment += '- [] Migration guide is updated\n';
+                comment += '- [] Changelog includes breaking change notes\n\n';
               }
 
               comment += '### 🔗 Helpful Links\n';

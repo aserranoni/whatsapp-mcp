@@ -207,7 +207,8 @@ jobs:
 
           if [[ -n "$PREVIOUS_TAG" ]]; then
             echo "📝 Generating changelog since $PREVIOUS_TAG"
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD | grep -v "Merge " || echo "- Initial release")
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD | \
+              grep -v "Merge " || echo "- Initial release")
           else
             echo "📝 First release - generating initial changelog"
             CHANGELOG="- Initial release"
@@ -277,7 +278,7 @@ jobs:
 
           echo "🎉 Successfully released v$VERSION!"
           echo "📦 Package: https://www.npmjs.com/package/whatsapp-mcp-server"
-          echo "🎯 Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v$VERSION"
+          echo "🎯 Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION"
 
           if [[ "$PRERELEASE" == "true" ]]; then
             echo "⚠️ This is a pre-release version"
@@ -286,6 +287,9 @@ jobs:
             echo "✅ This is a stable release"
             echo "📦 Install with: npm install -g whatsapp-mcp-server"
           fi
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
 
   rollback-on-failure:
     name: 🔄 Rollback on Failure
@@ -298,10 +302,15 @@ jobs:
       - name: 🔄 Attempt npm unpublish (if possible)
         run: |
           echo "❌ Release failed, checking if rollback is possible"
-          echo "🔗 Check failed job: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "🔗 Check failed job: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
           # Note: npm unpublish is generally not recommended and has restrictions
           # This is mainly for logging purposes
           echo "⚠️ Manual intervention may be required to handle the failed release"
-          echo "📝 Version: ${{ needs.validate-tag.outputs.version }}"
+          echo "📝 Version: $VERSION"
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          VERSION: ${{ needs.validate-tag.outputs.version }}
         continue-on-error: true

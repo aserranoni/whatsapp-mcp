@@ -2,9 +2,9 @@ name: 📏 Code Quality
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   schedule:
     # Run weekly on Sunday at 02:00 UTC
     - cron: '0 2 * * 0'
@@ -102,7 +102,7 @@ jobs:
           npx type-coverage --detail > type-coverage-report.txt || echo "⚠️ Type coverage analysis completed"
 
           # Extract coverage percentage and create simple report
-          if [ -f type-coverage-report.txt ]; then
+          if [[ -f type-coverage-report.txt ]]; then
             COVERAGE=$(grep -o '[0-9]\+\.[0-9]\+%' type-coverage-report.txt | head -1)
             echo "📊 Type coverage: $COVERAGE"
 
@@ -151,7 +151,7 @@ jobs:
 
       - name: 📊 Coverage summary
         run: |
-          if [ -f coverage/coverage-summary.json ]; then
+          if [[ -f coverage/coverage-summary.json ]]; then
             echo "📊 Coverage Summary:"
             node -e "
               const coverage = require('./coverage/coverage-summary.json');
@@ -231,7 +231,7 @@ jobs:
 
           # Simple complexity check
           echo "📊 Complexity Summary:"
-          if [ -f complexity-report.json ]; then
+          if [[ -f complexity-report.json ]]; then
             node -e "
               try {
                 const report = require('./complexity-report.json');
@@ -260,7 +260,7 @@ jobs:
           echo "📋 Detecting duplicate code..."
           jscpd src/ --reporters json --output ./jscpd-report.json || echo "⚠️ jscpd analysis completed with warnings"
 
-          if [ -f jscpd-report.json ]; then
+          if [[ -f jscpd-report.json ]]; then
             echo "📊 Duplication Summary:"
             node -e "
               try {
@@ -317,7 +317,7 @@ jobs:
           echo "🔍 Checking for outdated dependencies..."
           npm outdated --json > outdated-deps.json || echo "✅ All dependencies are up to date"
 
-          if [ -s outdated-deps.json ]; then
+          if [[ -s outdated-deps.json ]]; then
             echo "📊 Outdated Dependencies Summary:"
             node -e "
               try {
@@ -363,7 +363,7 @@ jobs:
           # Run depcheck
           depcheck --json > depcheck-report.json || echo "✅ No unused dependencies found"
 
-          if [ -f depcheck-report.json ]; then
+          if [[ -f depcheck-report.json ]]; then
             echo "📊 Dependency Check Summary:"
             node -e "
               try {
@@ -414,47 +414,47 @@ jobs:
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
           # Check each job result
-          if [[ "${{ needs.linting.result }}" == "success" ]]; then
+          if [[ "$LINTING_RESULT" == "success" ]]; then
             echo "| Linting & Formatting | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Linting & Formatting | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [[ "${{ needs.type-coverage.result }}" == "success" ]]; then
+          if [[ "$TYPE_COVERAGE_RESULT" == "success" ]]; then
             echo "| Type Coverage | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Type Coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [[ "${{ needs.test-coverage.result }}" == "success" ]]; then
+          if [[ "$TEST_COVERAGE_RESULT" == "success" ]]; then
             echo "| Test Coverage | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Test Coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [[ "${{ needs.code-metrics.result }}" == "success" ]]; then
+          if [[ "$CODE_METRICS_RESULT" == "success" ]]; then
             echo "| Code Metrics | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Code Metrics | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [[ "${{ needs.dependency-analysis.result }}" == "success" ]]; then
+          if [[ "$DEPENDENCY_ANALYSIS_RESULT" == "success" ]]; then
             echo "| Dependency Analysis | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Dependency Analysis | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-
+          
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Calculate overall quality score
           PASSED=0
           TOTAL=5
 
-          [[ "${{ needs.linting.result }}" == "success" ]] && ((PASSED++))
-          [[ "${{ needs.type-coverage.result }}" == "success" ]] && ((PASSED++))
-          [[ "${{ needs.test-coverage.result }}" == "success" ]] && ((PASSED++))
-          [[ "${{ needs.code-metrics.result }}" == "success" ]] && ((PASSED++))
-          [[ "${{ needs.dependency-analysis.result }}" == "success" ]] && ((PASSED++))
+          [[ "$LINTING_RESULT" == "success" ]] && ((PASSED++))
+          [[ "$TYPE_COVERAGE_RESULT" == "success" ]] && ((PASSED++))
+          [[ "$TEST_COVERAGE_RESULT" == "success" ]] && ((PASSED++))
+          [[ "$CODE_METRICS_RESULT" == "success" ]] && ((PASSED++))
+          [[ "$DEPENDENCY_ANALYSIS_RESULT" == "success" ]] && ((PASSED++))
 
           SCORE=$((PASSED * 100 / TOTAL))
 
@@ -474,3 +474,9 @@ jobs:
             echo "Code quality is below acceptable standards." >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
+        env:
+          LINTING_RESULT: ${{ needs.linting.result }}
+          TYPE_COVERAGE_RESULT: ${{ needs.type-coverage.result }}
+          TEST_COVERAGE_RESULT: ${{ needs.test-coverage.result }}
+          CODE_METRICS_RESULT: ${{ needs.code-metrics.result }}
+          DEPENDENCY_ANALYSIS_RESULT: ${{ needs.dependency-analysis.result }}
