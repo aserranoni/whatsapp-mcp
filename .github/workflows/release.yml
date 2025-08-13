@@ -1,0 +1,316 @@
+name: 🚀 Release & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  validate-tag:
+    name: 🏷️ Validate Tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      is-prerelease: ${{ steps.extract.outputs.prerelease }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Extract version info
+        id: extract
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+            if [[ $VERSION == *"-"* ]]; then
+              echo "prerelease=true" >> $GITHUB_OUTPUT
+              echo "🏷️ Pre-release version detected: $VERSION"
+            else
+              echo "prerelease=false" >> $GITHUB_OUTPUT
+              echo "🏷️ Stable version detected: $VERSION"
+            fi
+          else
+            echo "❌ Not a tag push, exiting"
+            exit 1
+          fi
+
+      - name: 🔍 Validate version format
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z or X.Y.Z-prerelease"
+            exit 1
+          fi
+          echo "✅ Version format is valid: $VERSION"
+
+  build-and-test:
+    name: 🏗️ Build & Test for Release
+    runs-on: ubuntu-latest
+    needs: validate-tag
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🔍 Lint code
+        run: npm run lint
+
+      - name: 🎯 Type check
+        run: npx tsc --noEmit
+
+      - name: 🧪 Run tests
+        run: npm test -- --coverage --watchAll=false
+        env:
+          NODE_ENV: test
+
+      - name: 🏗️ Build project
+        run: npm run build
+
+      - name: 📦 Create package
+        run: npm pack
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ needs.validate-tag.outputs.version }}
+          path: |
+            dist/
+            *.tgz
+          retention-days: 30
+
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: validate-tag
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🔒 Security audit
+        run: npm audit --audit-level high
+
+      - name: 🔍 Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  publish-npm:
+    name: 📢 Publish to npm
+    runs-on: ubuntu-latest
+    needs: [validate-tag, build-and-test, security-scan]
+    timeout-minutes: 10
+    environment: production
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🏗️ Build project
+        run: npm run build
+
+      - name: 🔍 Verify package contents
+        run: |
+          echo "📦 Package contents:"
+          npm pack --dry-run
+
+          echo "🔍 Verifying required files..."
+          test -d dist/ || (echo "❌ Missing dist directory" && exit 1)
+          test -f README.md || (echo "❌ Missing README.md" && exit 1)
+          test -f LICENSE || (echo "❌ Missing LICENSE" && exit 1)
+          echo "✅ All required files present"
+
+      - name: 📢 Publish to npm
+        run: |
+          if [[ "${{ needs.validate-tag.outputs.is-prerelease }}" == "true" ]]; then
+            echo "🚀 Publishing pre-release to npm with --tag beta"
+            npm publish --tag beta
+          else
+            echo "🚀 Publishing stable release to npm"
+            npm publish
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🏷️ Add npm version tag
+        run: |
+          if [[ "${{ needs.validate-tag.outputs.is-prerelease }}" == "false" ]]; then
+            npm dist-tag add whatsapp-mcp-server@${{ needs.validate-tag.outputs.version }} latest
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-github-release:
+    name: 🎉 Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate-tag, publish-npm]
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📝 Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+
+          # Get previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            echo "📝 Generating changelog since $PREVIOUS_TAG"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD | \
+              grep -v "Merge " || echo "- Initial release")
+          else
+            echo "📝 First release - generating initial changelog"
+            CHANGELOG="- Initial release"
+          fi
+
+          # Create release notes
+          cat > release_notes.md << EOF
+          ## 🚀 What's New in v$VERSION
+
+          ### Changes
+          $CHANGELOG
+
+          ### 📦 Installation
+
+          \`\`\`bash
+          npm install -g whatsapp-mcp-server@$VERSION
+          \`\`\`
+
+          ### 🔗 Links
+
+          - 📖 [Documentation](https://github.com/${{ github.repository }}#readme)
+          - 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)
+          - 💬 [Discussions](https://github.com/${{ github.repository }}/discussions)
+          - 📦 [npm Package](https://www.npmjs.com/package/whatsapp-mcp-server)
+
+          ### ✅ Verification
+
+          To verify the installation:
+          \`\`\`bash
+          whatsapp-mcp-server --help
+          \`\`\`
+          EOF
+
+          echo "changelog-file=release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: 📤 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: package-${{ needs.validate-tag.outputs.version }}
+          path: ./artifacts
+
+      - name: 🎉 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.validate-tag.outputs.version }}
+          name: 🚀 Release v${{ needs.validate-tag.outputs.version }}
+          body_path: ${{ steps.changelog.outputs.changelog-file }}
+          prerelease: ${{ needs.validate-tag.outputs.is-prerelease == 'true' }}
+          files: |
+            artifacts/*.tgz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-release:
+    name: 📢 Notify Release
+    runs-on: ubuntu-latest
+    needs: [validate-tag, create-github-release]
+    timeout-minutes: 5
+    if: success()
+
+    steps:
+      - name: 📢 Notify successful release
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          PRERELEASE="${{ needs.validate-tag.outputs.is-prerelease }}"
+
+          echo "🎉 Successfully released v$VERSION!"
+          echo "📦 Package: https://www.npmjs.com/package/whatsapp-mcp-server"
+          echo "🎯 Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION"
+
+          if [[ "$PRERELEASE" == "true" ]]; then
+            echo "⚠️ This is a pre-release version"
+            echo "📦 Install with: npm install -g whatsapp-mcp-server@beta"
+          else
+            echo "✅ This is a stable release"
+            echo "📦 Install with: npm install -g whatsapp-mcp-server"
+          fi
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+  rollback-on-failure:
+    name: 🔄 Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [validate-tag, publish-npm]
+    if: failure()
+    timeout-minutes: 5
+
+    steps:
+      - name: 🔄 Attempt npm unpublish (if possible)
+        run: |
+          echo "❌ Release failed, checking if rollback is possible"
+          echo "🔗 Check failed job: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          # Note: npm unpublish is generally not recommended and has restrictions
+          # This is mainly for logging purposes
+          echo "⚠️ Manual intervention may be required to handle the failed release"
+          echo "📝 Version: $VERSION"
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+        continue-on-error: true

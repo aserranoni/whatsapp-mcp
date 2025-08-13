@@ -34,7 +34,7 @@ export class TTSIntegration {
     
     // For now, skip ElevenLabs integration since the MCP command structure is different
     // This should be implemented with proper MCP client calls, not CLI commands
-    console.log('ElevenLabs integration not configured, falling back to system TTS');
+    console.log('ElevenLabs integration not configured, falling back to system TTS for:', options.text);
     throw new Error('ElevenLabs MCP integration needs proper implementation with MCP client calls');
   }
 

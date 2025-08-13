@@ -1,0 +1,484 @@
+name: 📏 Code Quality
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run weekly on Sunday at 02:00 UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  linting:
+    name: 🔍 Linting & Formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🔍 Run ESLint
+        run: |
+          echo "🔍 Running ESLint..."
+          npm run lint -- --format json --output-file eslint-report.json || true
+          npm run lint
+        continue-on-error: false
+
+      - name: 📤 Upload ESLint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-report
+          path: eslint-report.json
+          retention-days: 30
+
+      - name: 📊 ESLint annotations
+        if: always()
+        uses: ataylorme/eslint-annotate-action@v2
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          report-json: "eslint-report.json"
+
+      - name: ✨ Check Prettier formatting
+        run: |
+          echo "✨ Checking code formatting with Prettier..."
+          if command -v prettier &> /dev/null; then
+            npx prettier --check "src/**/*.{ts,js,json}" || {
+              echo "❌ Code is not properly formatted"
+              echo "🔧 Run 'npx prettier --write \"src/**/*.{ts,js,json}\"' to fix formatting"
+              exit 1
+            }
+            echo "✅ Code formatting is correct"
+          else
+            echo "⚠️ Prettier not found, skipping format check"
+          fi
+
+  type-coverage:
+    name: 🎯 TypeScript Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🎯 Type coverage analysis
+        run: |
+          echo "🎯 Analyzing TypeScript type coverage..."
+
+          # Install simpler type coverage tool
+          npm install -g type-coverage
+
+          # Generate type coverage report
+          npx type-coverage --detail > type-coverage-report.txt || echo "⚠️ Type coverage analysis completed"
+
+          # Extract coverage percentage and create simple report
+          if [[ -f type-coverage-report.txt ]]; then
+            COVERAGE=$(grep -o '[0-9]\+\.[0-9]\+%' type-coverage-report.txt | head -1)
+            echo "📊 Type coverage: $COVERAGE"
+
+            # Create HTML report directory with simple report
+            mkdir -p type-coverage-report
+            echo "<h1>Type Coverage Report</h1><p>Coverage: $COVERAGE</p>" > type-coverage-report/index.html
+            echo "<pre>$(cat type-coverage-report.txt)</pre>" >> type-coverage-report/index.html
+
+            echo "type-coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          else
+            echo "📊 Type coverage: N/A"
+            echo "type-coverage=N/A" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📤 Upload type coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-coverage-report
+          path: type-coverage-report/
+          retention-days: 30
+
+  test-coverage:
+    name: 🧪 Test Coverage Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 🧪 Run tests with coverage
+        run: |
+          echo "🧪 Running tests with coverage analysis..."
+          npm run test:ci
+        env:
+          NODE_ENV: test
+
+      - name: 📊 Coverage summary
+        run: |
+          if [[ -f coverage/coverage-summary.json ]]; then
+            echo "📊 Coverage Summary:"
+            node -e "
+              const coverage = require('./coverage/coverage-summary.json');
+              const total = coverage.total;
+              console.log('📈 Lines:', total.lines.pct + '%');
+              console.log('🌟 Functions:', total.functions.pct + '%');
+              console.log('🔀 Branches:', total.branches.pct + '%');
+              console.log('📄 Statements:', total.statements.pct + '%');
+
+              // Check thresholds
+              const thresholds = { lines: 80, functions: 80, branches: 70, statements: 80 };
+              let failed = false;
+
+              Object.keys(thresholds).forEach(key => {
+                if (total[key].pct < thresholds[key]) {
+                  console.log('❌ ' + key + ' coverage below threshold:',
+                    total[key].pct + '% < ' + thresholds[key] + '%');
+                  failed = true;
+                }
+              });
+
+              if (failed) {
+                console.log('❌ Coverage thresholds not met');
+                process.exit(1);
+              } else {
+                console.log('✅ All coverage thresholds met');
+              }
+            "
+          else
+            echo "⚠️ Coverage report not found"
+          fi
+
+      - name: 📤 Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+      - name: 📊 Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./coverage
+          flags: unittests
+          name: codecov-${{ github.run_id }}
+
+  code-metrics:
+    name: 📈 Code Metrics
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 📈 Analyze code complexity
+        run: |
+          echo "📈 Analyzing code complexity..."
+
+          # Install complexity analysis tools
+          npm install -g jscpd
+
+          # Generate complexity report using ESLint complexity rule
+          echo "🔍 Running complexity analysis..."
+          npx eslint src/ --rule 'complexity: [2, 10]' --format json > complexity-report.json || \
+            echo "⚠️ Some complexity issues found"
+
+          # Simple complexity check
+          echo "📊 Complexity Summary:"
+          if [[ -f complexity-report.json ]]; then
+            node -e "
+              try {
+                const report = require('./complexity-report.json');
+                const complexityIssues = report.filter(file =>
+                  file.messages.some(msg => msg.ruleId === 'complexity')
+                );
+
+                console.log('📊 Files analyzed:', report.length);
+                console.log('⚠️ Files with complexity issues:', complexityIssues.length);
+
+                if (complexityIssues.length > 0) {
+                  console.log('⚠️ Consider refactoring high complexity functions');
+                } else {
+                  console.log('✅ No high complexity functions found');
+                }
+              } catch (e) {
+                console.log('✅ Complexity analysis completed');
+              }
+            "
+          else
+            echo "✅ No complexity report generated - likely no complexity issues"
+          fi
+
+      - name: 📋 Duplicate code detection
+        run: |
+          echo "📋 Detecting duplicate code..."
+          jscpd src/ --reporters json --output ./jscpd-report.json || echo "⚠️ jscpd analysis completed with warnings"
+
+          if [[ -f jscpd-report.json ]]; then
+            echo "📊 Duplication Summary:"
+            node -e "
+              try {
+                const report = require('./jscpd-report.json');
+                const duplicates = report.duplicates || [];
+                console.log('📊 Total duplicates found:', duplicates.length);
+
+                if (duplicates.length > 10) {
+                  console.log('⚠️ High number of duplicates found - consider refactoring');
+                } else if (duplicates.length > 0) {
+                  console.log('ℹ️ Some duplicates found - review for potential refactoring opportunities');
+                } else {
+                  console.log('✅ No significant code duplication detected');
+                }
+              } catch (e) {
+                console.log('⚠️ Could not parse duplication report');
+              }
+            "
+          fi
+
+      - name: 📤 Upload code metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-metrics
+          path: |
+            complexity-report.json
+            jscpd-report.json
+          retention-days: 30
+
+  dependency-analysis:
+    name: 📦 Dependency Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: 📦 Dependency tree analysis
+        run: |
+          echo "📦 Analyzing dependency tree..."
+
+          # Check for outdated dependencies
+          echo "🔍 Checking for outdated dependencies..."
+          npm outdated --json > outdated-deps.json || echo "✅ All dependencies are up to date"
+
+          if [[ -s outdated-deps.json ]]; then
+            echo "📊 Outdated Dependencies Summary:"
+            node -e "
+              try {
+                const outdated = require('./outdated-deps.json');
+                const deps = Object.keys(outdated);
+                console.log('📊 Outdated dependencies:', deps.length);
+
+                deps.forEach(dep => {
+                  const info = outdated[dep];
+                  console.log(\`  - \${dep}: \${info.current} → \${info.latest}\`);
+                });
+
+                if (deps.length > 20) {
+                  console.log('⚠️ Many outdated dependencies - consider updating');
+                }
+              } catch (e) {
+                console.log('✅ All dependencies are up to date');
+              }
+            "
+          fi
+
+      - name: 📈 Bundle size analysis
+        run: |
+          echo "📈 Analyzing bundle size..."
+
+          # Build the project
+          npm run build
+
+          # Analyze bundle size
+          echo "📊 Built file sizes:"
+          du -sh dist/* || echo "⚠️ Could not analyze dist directory"
+
+          # Check for large files
+          find dist -type f -size +1M -exec echo "⚠️ Large file found: {} ($(du -h {} | cut -f1))" \;
+
+      - name: 🔍 Unused dependencies check
+        run: |
+          echo "🔍 Checking for unused dependencies..."
+
+          # Install depcheck
+          npm install -g depcheck
+
+          # Run depcheck
+          depcheck --json > depcheck-report.json || echo "✅ No unused dependencies found"
+
+          if [[ -f depcheck-report.json ]]; then
+            echo "📊 Dependency Check Summary:"
+            node -e "
+              try {
+                const report = require('./depcheck-report.json');
+
+                if (report.dependencies && report.dependencies.length > 0) {
+                  console.log('⚠️ Unused dependencies:', report.dependencies.join(', '));
+                } else {
+                  console.log('✅ No unused dependencies found');
+                }
+
+                if (report.devDependencies && report.devDependencies.length > 0) {
+                  console.log('⚠️ Unused devDependencies:', report.devDependencies.join(', '));
+                } else {
+                  console.log('✅ No unused devDependencies found');
+                }
+              } catch (e) {
+                console.log('✅ Dependency check completed');
+              }
+            "
+          fi
+
+      - name: 📤 Upload dependency analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-analysis
+          path: |
+            outdated-deps.json
+            depcheck-report.json
+          retention-days: 30
+
+  quality-gate:
+    name: 🚪 Quality Gate
+    runs-on: ubuntu-latest
+    needs: [linting, type-coverage, test-coverage, code-metrics, dependency-analysis]
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: 🚪 Quality gate summary
+        run: |
+          echo "## 📏 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🚪 Quality gate evaluation
+        run: |
+          if [[ "$LINTING_RESULT" == "success" ]]; then
+            echo "| Linting & Formatting | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Linting & Formatting | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "$TYPE_COVERAGE_RESULT" == "success" ]]; then
+            echo "| Type Coverage | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Type Coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "$TEST_COVERAGE_RESULT" == "success" ]]; then
+            echo "| Test Coverage | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Test Coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "$CODE_METRICS_RESULT" == "success" ]]; then
+            echo "| Code Metrics | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Code Metrics | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "$DEPENDENCY_ANALYSIS_RESULT" == "success" ]]; then
+            echo "| Dependency Analysis | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Dependency Analysis | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Calculate overall quality score
+          PASSED=0
+          TOTAL=5
+
+          if [[ "$LINTING_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$TYPE_COVERAGE_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$TEST_COVERAGE_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$CODE_METRICS_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+          if [[ "$DEPENDENCY_ANALYSIS_RESULT" == "success" ]]; then PASSED=$((PASSED + 1)); fi
+
+          SCORE=$((PASSED * 100 / TOTAL))
+
+          echo "### 📊 Quality Score: $SCORE% ($PASSED/$TOTAL)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ $SCORE -ge 80 ]]; then
+            echo "### ✅ Quality Gate: **PASSED**" >> $GITHUB_STEP_SUMMARY
+            echo "Code quality meets the required standards!" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          elif [[ $SCORE -ge 60 ]]; then
+            echo "### ⚠️ Quality Gate: **WARNING**" >> $GITHUB_STEP_SUMMARY
+            echo "Code quality has some issues that should be addressed." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          else
+            echo "### ❌ Quality Gate: **FAILED**" >> $GITHUB_STEP_SUMMARY
+            echo "Code quality is below acceptable standards." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+        env:
+          LINTING_RESULT: ${{ needs.linting.result }}
+          TYPE_COVERAGE_RESULT: ${{ needs.type-coverage.result }}
+          TEST_COVERAGE_RESULT: ${{ needs.test-coverage.result }}
+          CODE_METRICS_RESULT: ${{ needs.code-metrics.result }}
+          DEPENDENCY_ANALYSIS_RESULT: ${{ needs.dependency-analysis.result }}

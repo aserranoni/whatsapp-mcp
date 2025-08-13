@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation
+    url: https://github.com/your-username/whatsapp-mcp-server#readme
+    about: Read the comprehensive documentation and setup guides
+  - name: 💬 Discussions
+    url: https://github.com/your-username/whatsapp-mcp-server/discussions
+    about: Join community discussions and share ideas
+  - name: 🔒 Security Issues
+    url: https://github.com/your-username/whatsapp-mcp-server/security/advisories
+    about: Report security vulnerabilities privately

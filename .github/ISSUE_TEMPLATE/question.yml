@@ -1,0 +1,133 @@
+name: ❓ Question
+description: Ask a question about usage, configuration, or integration
+title: "[Question]: "
+labels: ["question", "needs-response"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're here to help! 🤝
+        
+        For faster responses, please check the documentation first.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-flight checklist
+      description: Please confirm you've checked these resources
+      options:
+        - label: I have read the README and documentation
+          required: true
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have checked the troubleshooting section
+          required: true
+
+  - type: dropdown
+    id: question-category
+    attributes:
+      label: Question Category
+      options:
+        - Installation & Setup
+        - WhatsApp Authentication
+        - MCP Integration
+        - Configuration
+        - Audio & TTS
+        - Troubleshooting
+        - Best Practices
+        - API Usage
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: |
+        I'm trying to...
+        I expected...
+        But I'm seeing...
+        
+        How can I...?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context & Background
+      description: What are you trying to achieve? What's your setup?
+      placeholder: |
+        I'm building a project that...
+        My current setup is...
+        I'm using...
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-tried
+    attributes:
+      label: What Have You Tried?
+      description: Steps you've already taken to solve this
+      placeholder: |
+        I tried...
+        I looked at...
+        I configured...
+
+  - type: input
+    id: environment-os
+    attributes:
+      label: Operating System
+      placeholder: "macOS 13.0, Ubuntu 22.04, Windows 11, etc."
+
+  - type: input
+    id: environment-node
+    attributes:
+      label: Node.js Version
+      placeholder: "v18.17.0"
+
+  - type: input
+    id: package-version
+    attributes:
+      label: Package Version
+      placeholder: "2.0.0"
+
+  - type: textarea
+    id: configuration-details
+    attributes:
+      label: Configuration Details
+      description: Share relevant configuration (remove sensitive info)
+      placeholder: |
+        MCP configuration:
+        {...}
+        
+        Environment variables:
+        WHATSAPP_SESSION_NAME=...
+      render: yaml
+
+  - type: textarea
+    id: error-messages
+    attributes:
+      label: Error Messages (if any)
+      description: Include any error messages you're seeing
+      render: shell
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      options:
+        - Low (general question)
+        - Medium (blocking progress)
+        - High (urgent project need)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Anything else that might help us answer your question
