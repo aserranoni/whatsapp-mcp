@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url';
 
 import { WhatsAppClientWrapper } from './whatsapp-client.js';
 import { TTSIntegration } from './tts-integration.js';
-import { SessionManager } from './auth/index.js';
+import { SessionManager, AuthConfigManager } from './auth/index.js';
 import type { 
   WhatsAppConfig, 
   AudioMessage, 
@@ -63,6 +63,7 @@ class WhatsAppMcpServer {
   private whatsappClient: WhatsAppClientWrapper | null = null;
   private ttsIntegration: TTSIntegration;
   private sessionManager: SessionManager;
+  private authConfig: import('./auth/index.js').AuthConfig;
 
   constructor() {
     this.server = new Server(
@@ -78,9 +79,13 @@ class WhatsAppMcpServer {
     );
 
     this.ttsIntegration = new TTSIntegration(path.join(__dirname, '..', 'audio'));
+    
+    this.authConfig = AuthConfigManager.createAuthConfig();
+    AuthConfigManager.validateConfig(this.authConfig);
+    
     this.sessionManager = new SessionManager({
-      sessionDir: './whatsapp_session',
-      sessionPrefix: 'session-'
+      sessionDir: this.authConfig.sessionDir,
+      sessionPrefix: this.authConfig.sessionPrefix
     });
     this.setupToolHandlers();
     this.setupErrorHandling();
@@ -313,9 +318,9 @@ class WhatsAppMcpServer {
       
       const config: WhatsAppConfig = {
         sessionName: sessionInfo.name,
-        qrCodeTimeout: 60000,
-        authTimeoutMs: 30000,
-        userDataDir: './whatsapp_session',
+        qrCodeTimeout: this.authConfig.qrCodeTimeout,
+        authTimeoutMs: this.authConfig.authTimeoutMs,
+        userDataDir: this.authConfig.sessionDir,
       };
 
       this.whatsappClient = new WhatsAppClientWrapper(config);
