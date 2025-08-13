@@ -22,7 +22,10 @@ import type {
   AudioMessage, 
   TextMessage, 
   McpToolResult,
-  TTSRequest 
+  TTSRequest,
+  MessageReceivingConfig,
+  MessageFilter,
+  IncomingMessage
 } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -55,6 +58,36 @@ const SendMediaFromUrlSchema = z.object({
   chatId: z.string().describe('WhatsApp chat ID'),
   url: z.string().url().describe('URL of the media to send'),
   caption: z.string().optional().describe('Optional caption for the media'),
+});
+
+// Message retrieval schemas
+const GetRecentMessagesSchema = z.object({
+  limit: z.number().default(20).describe('Number of recent messages to retrieve'),
+  chatId: z.string().optional().describe('Filter by specific chat ID'),
+  onlyUnread: z.boolean().default(false).describe('Only retrieve unread messages'),
+  includeMedia: z.boolean().default(true).describe('Include media messages'),
+});
+
+const GetMessageByIdSchema = z.object({
+  messageId: z.string().describe('Unique message ID to retrieve'),
+});
+
+const GetConversationHistorySchema = z.object({
+  chatId: z.string().describe('Chat ID to get history for'),
+  limit: z.number().default(50).describe('Maximum number of messages to retrieve'),
+  before: z.string().optional().describe('ISO date to get messages before'),
+  after: z.string().optional().describe('ISO date to get messages after'),
+});
+
+const SearchMessagesSchema = z.object({
+  query: z.string().describe('Search query text'),
+  chatId: z.string().optional().describe('Filter by specific chat ID'),
+  from: z.string().optional().describe('Filter by sender'),
+  limit: z.number().default(20).describe('Maximum number of results'),
+});
+
+const GetUnreadMessagesSchema = z.object({
+  markAsRead: z.boolean().default(false).describe('Mark messages as read after retrieval'),
 });
 
 class WhatsAppMcpServer {
@@ -186,6 +219,31 @@ class WhatsAppMcpServer {
               required: ['chatId', 'taskName', 'summary'],
             },
           },
+          {
+            name: 'get_recent_messages',
+            description: 'Fetch recent WhatsApp messages with optional filters',
+            inputSchema: GetRecentMessagesSchema,
+          },
+          {
+            name: 'get_message_by_id',
+            description: 'Retrieve a specific message by its ID',
+            inputSchema: GetMessageByIdSchema,
+          },
+          {
+            name: 'get_conversation_history',
+            description: 'Get message history from a specific chat',
+            inputSchema: GetConversationHistorySchema,
+          },
+          {
+            name: 'search_messages',
+            description: 'Search messages by content or sender',
+            inputSchema: SearchMessagesSchema,
+          },
+          {
+            name: 'get_unread_messages',
+            description: 'Fetch all unread messages',
+            inputSchema: GetUnreadMessagesSchema,
+          },
         ],
       };
     });
@@ -223,6 +281,26 @@ class WhatsAppMcpServer {
           case 'send_task_completion_notification':
             return await this.sendTaskCompletionNotification(args);
 
+          case 'get_recent_messages':
+            const recentParams = GetRecentMessagesSchema.parse(args);
+            return await this.getRecentMessages(recentParams);
+
+          case 'get_message_by_id':
+            const messageIdParams = GetMessageByIdSchema.parse(args);
+            return await this.getMessageById(messageIdParams);
+
+          case 'get_conversation_history':
+            const historyParams = GetConversationHistorySchema.parse(args);
+            return await this.getConversationHistory(historyParams);
+
+          case 'search_messages':
+            const searchParams = SearchMessagesSchema.parse(args);
+            return await this.searchMessages(searchParams);
+
+          case 'get_unread_messages':
+            const unreadParams = GetUnreadMessagesSchema.parse(args);
+            return await this.getUnreadMessages(unreadParams);
+
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -252,6 +330,40 @@ class WhatsAppMcpServer {
 
       this.whatsappClient = new WhatsAppClientWrapper(config);
       
+      // Enable message receiving with default configuration
+      const messageConfig: MessageReceivingConfig = {
+        enableMessageHistory: true,
+        enableWebhooks: false,
+        enableAutoResponse: false,
+        storageType: 'both', // Use both memory and SQLite
+        maxHistorySize: 1000,
+        persistMessages: true,
+        retentionDays: 30,
+        autoDownloadMedia: false,
+        maxMediaSize: 10, // 10MB
+        mediaStoragePath: './media',
+        rateLimitPerMinute: 60,
+        maxConcurrentProcessing: 10,
+        messageQueueSize: 1000,
+        encryptStorage: false,
+        privacyMode: false,
+        webhookRetries: 3,
+        webhookTimeout: 5000
+      };
+
+      this.whatsappClient.enableMessageReceiving({
+        rateLimitPerMinute: messageConfig.rateLimitPerMinute,
+        enableStorage: true,
+        enableWebhooks: false,
+        maxQueueSize: messageConfig.messageQueueSize
+      });
+
+      const messageHandler = this.whatsappClient.getMessageHandler();
+      if (messageHandler) {
+        messageHandler.configureStorage(messageConfig);
+        await messageHandler.initializeStorage();
+      }
+
       console.log('Initializing WhatsApp client...');
       await this.whatsappClient.initialize();
 
@@ -506,6 +618,253 @@ class WhatsAppMcpServer {
         content: [{
           type: 'text',
           text: `Failed to send task completion notification: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async getRecentMessages(params: z.infer<typeof GetRecentMessagesSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    if (!messageHandler) {
+      throw new McpError(ErrorCode.InternalError, 'Message receiving not enabled');
+    }
+
+    try {
+      let messages: IncomingMessage[];
+
+      if (params.chatId) {
+        messages = await messageHandler.getChatMessages(params.chatId, params.limit);
+      } else {
+        messages = await messageHandler.getRecentMessages(params.limit);
+      }
+
+      // Filter for unread messages if requested
+      if (params.onlyUnread) {
+        messages = messages.filter(msg => !msg.isRead);
+      }
+
+      // Filter media messages if not requested
+      if (!params.includeMedia) {
+        messages = messages.filter(msg => !msg.hasMedia);
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            count: messages.length,
+            messages: messages.map(msg => ({
+              id: msg.id,
+              from: msg.from,
+              to: msg.to,
+              body: msg.body,
+              type: msg.type,
+              timestamp: msg.timestamp,
+              isGroup: msg.isGroup,
+              author: msg.author,
+              hasMedia: msg.hasMedia,
+              isForwarded: msg.isForwarded,
+              isRead: msg.isRead,
+              mentions: msg.mentions
+            }))
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to retrieve recent messages: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async getMessageById(params: z.infer<typeof GetMessageByIdSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    if (!messageHandler) {
+      throw new McpError(ErrorCode.InternalError, 'Message receiving not enabled');
+    }
+
+    try {
+      const message = await messageHandler.getMessage(params.messageId);
+
+      if (!message) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Message with ID ${params.messageId} not found`,
+          }],
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(message, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to retrieve message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async getConversationHistory(params: z.infer<typeof GetConversationHistorySchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    if (!messageHandler) {
+      throw new McpError(ErrorCode.InternalError, 'Message receiving not enabled');
+    }
+
+    try {
+      const filter: MessageFilter = {
+        chatId: params.chatId,
+      };
+
+      if (params.before) {
+        filter.endDate = new Date(params.before);
+      }
+
+      if (params.after) {
+        filter.startDate = new Date(params.after);
+      }
+
+      let messages: IncomingMessage[];
+      if (params.before || params.after) {
+        messages = await messageHandler.filterMessages(filter);
+        messages = messages.slice(0, params.limit);
+      } else {
+        messages = await messageHandler.getChatMessages(params.chatId, params.limit);
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            chatId: params.chatId,
+            count: messages.length,
+            messages: messages
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to retrieve conversation history: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async searchMessages(params: z.infer<typeof SearchMessagesSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    if (!messageHandler) {
+      throw new McpError(ErrorCode.InternalError, 'Message receiving not enabled');
+    }
+
+    try {
+      let messages: IncomingMessage[];
+
+      // Use filter if additional parameters are provided
+      if (params.chatId || params.from) {
+        const filter: MessageFilter = {
+          searchText: params.query,
+          chatId: params.chatId,
+          from: params.from
+        };
+        messages = await messageHandler.filterMessages(filter);
+        messages = messages.slice(0, params.limit);
+      } else {
+        // Use simple search
+        messages = await messageHandler.searchMessages(params.query);
+        messages = messages.slice(0, params.limit);
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            query: params.query,
+            count: messages.length,
+            messages: messages
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to search messages: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async getUnreadMessages(params: z.infer<typeof GetUnreadMessagesSchema>): Promise<CallToolResult> {
+    if (!this.whatsappClient) {
+      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
+    }
+
+    const messageHandler = this.whatsappClient.getMessageHandler();
+    if (!messageHandler) {
+      throw new McpError(ErrorCode.InternalError, 'Message receiving not enabled');
+    }
+
+    try {
+      const filter: MessageFilter = {
+        isUnread: true
+      };
+
+      const messages = await messageHandler.filterMessages(filter);
+
+      // Mark as read if requested
+      if (params.markAsRead && messages.length > 0) {
+        const messageIds = messages.map(msg => msg.id);
+        const readCount = messageHandler.markMultipleAsRead(messageIds);
+        console.log(`Marked ${readCount} messages as read`);
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            count: messages.length,
+            markedAsRead: params.markAsRead ? messages.length : 0,
+            messages: messages
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to retrieve unread messages: ${error instanceof Error ? error.message : 'Unknown error'}`,
         }],
         isError: true,
       };
