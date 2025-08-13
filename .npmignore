@@ -1,0 +1,47 @@
+# Source files (built files are in dist/)
+src/
+
+# Development files
+tsconfig.json
+jest.config.js
+jest.setup.js
+.eslintrc.json
+
+# Development dependencies
+node_modules/
+
+# Session data and secrets
+whatsapp_session/
+.env
+.env.local
+.env.*.local
+
+# Temporary and test files
+*.log
+*.tmp
+test-*.js
+debug-*.js
+final-*.js
+check-*.js
+send-*.js
+init-*.js
+initialize-*.js
+
+# IDE and OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git files
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# Other
+coverage/
+*.tgz
+.nyc_output
