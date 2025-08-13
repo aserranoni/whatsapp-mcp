@@ -87,7 +87,7 @@ jobs:
         run: npm run build
 
       - name: 🧪 Run tests
-        run: npm test -- --coverage --watchAll=false
+        run: npm run test:ci
         env:
           NODE_ENV: test
 
@@ -152,7 +152,7 @@ jobs:
         run: npm ci --prefer-offline --no-audit
 
       - name: 🎯 Type check
-        run: npx tsc --noEmit --incremental false
+        run: npm run typecheck
 
   package-test:
     name: 📦 Package Test

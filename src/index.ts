@@ -12,17 +12,12 @@ import {
 import { z } from 'zod';
 import dotenv from 'dotenv';
 import path from 'path';
-import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 
 import { WhatsAppClientWrapper } from './whatsapp-client.js';
 import { TTSIntegration } from './tts-integration.js';
 import type { 
-  WhatsAppConfig, 
-  AudioMessage, 
-  TextMessage, 
-  McpToolResult,
-  TTSRequest 
+  WhatsAppConfig
 } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
