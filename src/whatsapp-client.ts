@@ -4,7 +4,13 @@ const { Client, LocalAuth, MessageMedia } = pkg;
 type WhatsAppClient = InstanceType<typeof Client>;
 import path from 'path';
 import fs from 'fs/promises';
-import { AuthConfigManager, AuthStateManager, AuthState } from './auth/index.js';
+import { 
+  AuthConfigManager, 
+  AuthStateManager, 
+  AuthState, 
+  AuthStrategyManager,
+  type AuthContext
+} from './auth/index.js';
 import type { 
   WhatsAppConfig, 
   AudioMessage, 
@@ -21,10 +27,31 @@ export class WhatsAppClientWrapper {
   private phoneNumber: string | null = null;
   private lastConnected: Date | null = null;
   private authStateManager: AuthStateManager;
+  private authStrategyManager: AuthStrategyManager;
+  private authConfig: import('./auth/index.js').AuthConfig;
 
   constructor(config: WhatsAppConfig) {
     this.config = config;
     this.authStateManager = new AuthStateManager();
+    
+    // Create auth configuration
+    this.authConfig = AuthConfigManager.createAuthConfig({
+      authTimeoutMs: config.authTimeoutMs,
+      qrCodeTimeout: config.qrCodeTimeout,
+      sessionDir: config.userDataDir || AuthConfigManager.getDefaultSessionDir()
+    });
+    AuthConfigManager.validateConfig(this.authConfig);
+
+    // Create auth context for strategies
+    const authContext: AuthContext = {
+      config: this.authConfig,
+      stateManager: this.authStateManager,
+      sessionName: config.sessionName,
+      userDataDir: config.userDataDir || AuthConfigManager.getDefaultSessionDir()
+    };
+
+    // Initialize auth strategy manager
+    this.authStrategyManager = new AuthStrategyManager(authContext);
     
     const puppeteerConfig = AuthConfigManager.createPuppeteerConfig({
       userDataDir: config.userDataDir
@@ -133,27 +160,32 @@ export class WhatsAppClientWrapper {
         sessionName: this.config.sessionName
       });
 
-      // Check if we already have a session
-      const sessionPath = path.join(this.config.userDataDir || './whatsapp_session', `session-${this.config.sessionName}`);
-      const hasExistingSession = await fs.access(sessionPath).then(() => true).catch(() => false);
+      // Use auth strategy manager to determine authentication approach
+      const authResult = await this.authStrategyManager.authenticate();
       
-      if (!hasExistingSession) {
-        this.authStateManager.transitionTo(AuthState.FAILED, {
-          error: `No authenticated session found for '${this.config.sessionName}'. Please run "npm run auth" first.`,
-          reason: 'Session not found'
-        });
-        throw new Error(`No authenticated session found for '${this.config.sessionName}'. Please run "npm run auth" first.`);
+      if (!authResult.success) {
+        if (authResult.requiresQr) {
+          // QR code required - this is handled by the event handlers
+          throw new Error(authResult.error || 'QR code authentication required');
+        } else {
+          // Other authentication failure
+          this.authStateManager.transitionTo(AuthState.FAILED, {
+            error: authResult.error || 'Authentication failed',
+            reason: authResult.error || 'Unknown authentication error'
+          });
+          throw new Error(authResult.error || 'Authentication failed');
+        }
       }
       
-      console.log(`💾 Loading existing session: '${this.config.sessionName}'`);
+      console.log(`💾 Loading session: '${this.config.sessionName}'`);
       console.log('Initializing WhatsApp client...');
       await this.client.initialize();
       
       // Wait for ready state with timeout
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error(`Client initialization timed out after ${this.config.authTimeoutMs}ms`));
-        }, this.config.authTimeoutMs);
+          reject(new Error(`Client initialization timed out after ${this.authConfig.authTimeoutMs}ms`));
+        }, this.authConfig.authTimeoutMs);
 
         this.client.once('ready', () => {
           clearTimeout(timeout);
@@ -296,7 +328,25 @@ export class WhatsAppClientWrapper {
     this.authStateManager.onAnyStateChange(callback);
   }
 
+  getAuthStrategies(): string[] {
+    return this.authStrategyManager.getAvailableStrategies();
+  }
+
+  async getRecommendedAuthStrategy(): Promise<string> {
+    return await this.authStrategyManager.getRecommendedStrategy();
+  }
+
+  getAuthConfig(): import('./auth/index.js').AuthConfig {
+    return { ...this.authConfig };
+  }
+
   async destroy(): Promise<void> {
+    try {
+      await this.authStrategyManager.cleanup();
+    } catch (error) {
+      console.warn('Error during auth strategy cleanup:', error);
+    }
+
     if (this.client) {
       await this.client.destroy();
     }
