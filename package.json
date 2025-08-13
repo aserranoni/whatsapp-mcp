@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-mcp-server",
-  "version": "1.0.0",
-  "description": "Model Context Protocol (MCP) server for WhatsApp integration with text-to-speech and audio notification capabilities",
+  "version": "2.0.0",
+  "description": "Advanced WhatsApp MCP server with intelligent auth system, TTS support, and comprehensive session management for seamless Claude integration",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -12,7 +12,9 @@
     "README.md",
     "LICENSE",
     "package.json",
-    ".env.example"
+    ".env.example",
+    "docs/**/*",
+    "examples/**/*"
   ],
   "scripts": {
     "build": "tsc",
@@ -25,7 +27,9 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build && npm test",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "init-whatsapp": "node init-whatsapp.js",
+    "auth": "node init-whatsapp.js"
   },
   "keywords": [
     "mcp",
@@ -41,7 +45,12 @@
     "messaging",
     "automation",
     "bot",
-    "claude"
+    "claude",
+    "authentication",
+    "session-management",
+    "strategy-pattern",
+    "state-machine",
+    "typescript"
   ],
   "author": {
     "name": "WhatsApp MCP Server Contributors"

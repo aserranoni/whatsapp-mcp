@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 
 import { WhatsAppClientWrapper } from './whatsapp-client.js';
 import { TTSIntegration } from './tts-integration.js';
+import { SessionManager, AuthConfigManager } from './auth/index.js';
 import type { 
   WhatsAppConfig
 } from './types.js';
@@ -56,6 +57,8 @@ class WhatsAppMcpServer {
   private server: Server;
   private whatsappClient: WhatsAppClientWrapper | null = null;
   private ttsIntegration: TTSIntegration;
+  private sessionManager: SessionManager;
+  private authConfig: import('./auth/index.js').AuthConfig;
 
   constructor() {
     this.server = new Server(
@@ -71,6 +74,14 @@ class WhatsAppMcpServer {
     );
 
     this.ttsIntegration = new TTSIntegration(path.join(__dirname, '..', 'audio'));
+    
+    this.authConfig = AuthConfigManager.createAuthConfig();
+    AuthConfigManager.validateConfig(this.authConfig);
+    
+    this.sessionManager = new SessionManager({
+      sessionDir: this.authConfig.sessionDir,
+      sessionPrefix: this.authConfig.sessionPrefix
+    });
     this.setupToolHandlers();
     this.setupErrorHandling();
   }
@@ -94,25 +105,6 @@ class WhatsAppMcpServer {
       return {
         tools: [
           {
-            name: 'initialize_whatsapp',
-            description: 'Initialize WhatsApp client with QR code authentication',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                sessionName: {
-                  type: 'string',
-                  description: 'Name for the WhatsApp session',
-                  default: 'whatsapp-mcp',
-                },
-                authTimeoutMs: {
-                  type: 'number',
-                  description: 'Authentication timeout in milliseconds',
-                  default: 60000,
-                },
-              },
-            },
-          },
-          {
             name: 'get_whatsapp_status',
             description: 'Get current WhatsApp client connection status',
             inputSchema: {
@@ -123,22 +115,97 @@ class WhatsAppMcpServer {
           {
             name: 'send_text_message',
             description: 'Send a text message via WhatsApp',
-            inputSchema: SendTextMessageSchema,
+            inputSchema: {
+              type: 'object',
+              properties: {
+                chatId: {
+                  type: 'string',
+                  description: 'WhatsApp chat ID (phone number with country code, e.g., 5511999999999@c.us)',
+                },
+                text: {
+                  type: 'string',
+                  description: 'Message text to send',
+                },
+              },
+              required: ['chatId', 'text'],
+            },
           },
           {
             name: 'send_audio_message',
             description: 'Send an audio file or voice note via WhatsApp',
-            inputSchema: SendAudioMessageSchema,
+            inputSchema: {
+              type: 'object',
+              properties: {
+                chatId: {
+                  type: 'string',
+                  description: 'WhatsApp chat ID',
+                },
+                filePath: {
+                  type: 'string',
+                  description: 'Absolute path to the audio file',
+                },
+                caption: {
+                  type: 'string',
+                  description: 'Optional caption for the audio message',
+                },
+                sendAsVoiceNote: {
+                  type: 'boolean',
+                  description: 'Send as voice note (PTT) or regular audio file',
+                  default: true,
+                },
+              },
+              required: ['chatId', 'filePath'],
+            },
           },
           {
             name: 'send_tts_message',
             description: 'Generate TTS audio and send as voice note (requires ElevenLabs integration)',
-            inputSchema: SendTTSMessageSchema,
+            inputSchema: {
+              type: 'object',
+              properties: {
+                chatId: {
+                  type: 'string',
+                  description: 'WhatsApp chat ID',
+                },
+                text: {
+                  type: 'string',
+                  description: 'Text to convert to speech',
+                },
+                voiceName: {
+                  type: 'string',
+                  description: 'Voice name for TTS (if available)',
+                },
+                speed: {
+                  type: 'number',
+                  description: 'Speech speed (0.5-2.0)',
+                  default: 1.0,
+                },
+              },
+              required: ['chatId', 'text'],
+            },
           },
           {
             name: 'send_media_from_url',
             description: 'Send media (image, video, audio) from a URL',
-            inputSchema: SendMediaFromUrlSchema,
+            inputSchema: {
+              type: 'object',
+              properties: {
+                chatId: {
+                  type: 'string',
+                  description: 'WhatsApp chat ID',
+                },
+                url: {
+                  type: 'string',
+                  format: 'uri',
+                  description: 'URL of the media to send',
+                },
+                caption: {
+                  type: 'string',
+                  description: 'Optional caption for the media',
+                },
+              },
+              required: ['chatId', 'url'],
+            },
           },
           {
             name: 'list_contacts',
@@ -190,9 +257,6 @@ class WhatsAppMcpServer {
 
       try {
         switch (name) {
-          case 'initialize_whatsapp':
-            return await this.initializeWhatsApp(args);
-
           case 'get_whatsapp_status':
             return await this.getWhatsAppStatus();
 
@@ -236,63 +300,64 @@ class WhatsAppMcpServer {
     });
   }
 
-  private async initializeWhatsApp(args: any): Promise<CallToolResult> {
+  private async ensureWhatsAppClient(): Promise<void> {
+    if (this.whatsappClient) {
+      return;
+    }
+
     try {
+      const sessionInfo = await this.sessionManager.getMostRecentValidSession();
+      
+      // Clean up any lock files from previous sessions
+      await this.sessionManager.cleanupLockFiles(sessionInfo.name);
+      
       const config: WhatsAppConfig = {
-        sessionName: args.sessionName || 'whatsapp-mcp',
-        qrCodeTimeout: 60000,
-        authTimeoutMs: args.authTimeoutMs || 60000,
-        userDataDir: './whatsapp_session',
+        sessionName: sessionInfo.name,
+        qrCodeTimeout: this.authConfig.qrCodeTimeout,
+        authTimeoutMs: this.authConfig.authTimeoutMs,
+        userDataDir: this.authConfig.sessionDir,
       };
 
       this.whatsappClient = new WhatsAppClientWrapper(config);
-      
-      console.log('Initializing WhatsApp client...');
+      console.log(`Loading WhatsApp session: ${sessionInfo.name}`);
       await this.whatsappClient.initialize();
+      console.log('WhatsApp client loaded successfully!');
+    } catch (error) {
+      console.error('Failed to load WhatsApp client:', error);
+      throw error;
+    }
+  }
 
+
+  private async getWhatsAppStatus(): Promise<CallToolResult> {
+    try {
+      console.log('🔄 Getting WhatsApp status - attempting to ensure client...');
+      await this.ensureWhatsAppClient();
+      console.log('✅ WhatsApp client ensured, getting status...');
+      const status = this.whatsappClient!.getStatus();
+      console.log('📊 Status retrieved:', status);
       return {
         content: [{
           type: 'text',
-          text: 'WhatsApp client initialized successfully! You can now send messages.',
+          text: JSON.stringify(status, null, 2),
         }],
       };
     } catch (error) {
+      console.error('❌ Error getting WhatsApp status:', error);
       return {
         content: [{
           type: 'text',
-          text: `Failed to initialize WhatsApp: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          text: `WhatsApp client not available: ${error instanceof Error ? error.message : 'Unknown error'}`,
         }],
         isError: true,
       };
     }
   }
 
-  private async getWhatsAppStatus(): Promise<CallToolResult> {
-    if (!this.whatsappClient) {
-      return {
-        content: [{
-          type: 'text',
-          text: 'WhatsApp client not initialized. Use initialize_whatsapp tool first.',
-        }],
-      };
-    }
-
-    const status = this.whatsappClient.getStatus();
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(status, null, 2),
-      }],
-    };
-  }
-
   private async sendTextMessage(params: z.infer<typeof SendTextMessageSchema>): Promise<CallToolResult> {
-    if (!this.whatsappClient) {
-      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
-    }
-
     try {
-      await this.whatsappClient.sendTextMessage(params);
+      await this.ensureWhatsAppClient();
+      await this.whatsappClient!.sendTextMessage(params);
       return {
         content: [{
           type: 'text',
@@ -311,12 +376,9 @@ class WhatsAppMcpServer {
   }
 
   private async sendAudioMessage(params: z.infer<typeof SendAudioMessageSchema>): Promise<CallToolResult> {
-    if (!this.whatsappClient) {
-      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
-    }
-
     try {
-      await this.whatsappClient.sendAudioMessage(params);
+      await this.ensureWhatsAppClient();
+      await this.whatsappClient!.sendAudioMessage(params);
       const messageType = params.sendAsVoiceNote ? 'voice note' : 'audio file';
       return {
         content: [{
@@ -336,11 +398,8 @@ class WhatsAppMcpServer {
   }
 
   private async sendTTSMessage(params: z.infer<typeof SendTTSMessageSchema>): Promise<CallToolResult> {
-    if (!this.whatsappClient) {
-      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
-    }
-
     try {
+      await this.ensureWhatsAppClient();
       // Try to generate TTS using ElevenLabs first, then fallback
       let audioPath: string;
       
@@ -356,7 +415,7 @@ class WhatsAppMcpServer {
       }
 
       // Send the generated audio as a voice note
-      await this.whatsappClient.sendAudioMessage({
+      await this.whatsappClient!.sendAudioMessage({
         chatId: params.chatId,
         filePath: audioPath,
         sendAsVoiceNote: true,
@@ -380,12 +439,9 @@ class WhatsAppMcpServer {
   }
 
   private async sendMediaFromUrl(params: z.infer<typeof SendMediaFromUrlSchema>): Promise<CallToolResult> {
-    if (!this.whatsappClient) {
-      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
-    }
-
     try {
-      await this.whatsappClient.sendMediaFromUrl(params.chatId, params.url, params.caption);
+      await this.ensureWhatsAppClient();
+      await this.whatsappClient!.sendMediaFromUrl(params.chatId, params.url, params.caption);
       return {
         content: [{
           type: 'text',
@@ -404,12 +460,9 @@ class WhatsAppMcpServer {
   }
 
   private async listContacts(args: any): Promise<CallToolResult> {
-    if (!this.whatsappClient) {
-      throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
-    }
-
     try {
-      const contacts = await this.whatsappClient.getContacts();
+      await this.ensureWhatsAppClient();
+      const contacts = await this.whatsappClient!.getContacts();
       const includeGroups = args.includeGroups || false;
       
       const filteredContacts = includeGroups 
@@ -439,12 +492,10 @@ class WhatsAppMcpServer {
     try {
       const textMessage = `✅ Task Completed: ${taskName}\\n\\n${summary}`;
       
-      if (!this.whatsappClient) {
-        throw new McpError(ErrorCode.InternalError, 'WhatsApp client not initialized');
-      }
+      await this.ensureWhatsAppClient();
 
       // Send text notification
-      await this.whatsappClient.sendTextMessage({ chatId, text: textMessage });
+      await this.whatsappClient!.sendTextMessage({ chatId, text: textMessage });
 
       if (includeAudio) {
         try {
@@ -462,7 +513,7 @@ class WhatsAppMcpServer {
           }
 
           // Send audio notification
-          await this.whatsappClient.sendAudioMessage({
+          await this.whatsappClient!.sendAudioMessage({
             chatId,
             filePath: audioPath,
             sendAsVoiceNote: true,

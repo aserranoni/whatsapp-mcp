@@ -16,6 +16,10 @@ A Model Context Protocol (MCP) server that enables WhatsApp integration with tex
 - 🔄 **Session Persistence**: Maintain WhatsApp sessions across restarts
 - 🌐 **Media Support**: Send images, videos, and other media from URLs
 - 🔒 **Secure**: Environment-based configuration with no hard-coded credentials
+- 🛡️ **Advanced Auth System**: Intelligent authentication with multiple strategies
+- 📊 **Auth State Management**: Real-time authentication status monitoring
+- ⚡ **Auto-Strategy Selection**: Automatic selection of best auth method
+- 🔧 **Comprehensive Error Handling**: Detailed error messages with recovery suggestions
 
 ## Requirements
 
@@ -52,12 +56,46 @@ npm run build
 
 ## Quick Start
 
-1. Install the package globally:
+### 1. First-Time Authentication
+
+Before using the MCP server, you need to authenticate with WhatsApp using a QR code:
+
 ```bash
-npm install -g whatsapp-mcp-server
+# Run the initialization script
+npm run auth
+
+# Or with a custom session name
+npm run auth my-session
 ```
 
-2. Create a configuration file:
+This will:
+- Display a QR code in your terminal
+- Wait for you to scan it with your WhatsApp mobile app
+- Save the authentication session for future use
+- Exit once authentication is complete
+
+**Important**: You only need to do this once. The session will persist across restarts.
+
+### 2. Using with MCP Clients
+
+Once authenticated, configure your MCP client (like Claude Desktop) to use the server:
+
+```json
+{
+  "mcpServers": {
+    "whatsapp": {
+      "command": "whatsapp-mcp-server",
+      "env": {
+        "ELEVENLABS_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+### 3. Test the Connection
+
+You can now test sending a message:
 ```bash
 cp .env.example .env
 # Edit .env with your settings
@@ -87,9 +125,50 @@ AUDIO_OUTPUT_DIR=./audio
 TTS_DEFAULT_VOICE=Rachel
 ```
 
-### WhatsApp Authentication
+### WhatsApp Authentication System
 
-On first run, you'll need to scan a QR code with your WhatsApp mobile app to authenticate. The session will be saved for future use.
+The server features an advanced authentication system with multiple strategies:
+
+#### Authentication Strategies
+
+1. **Session Restore Strategy**: Automatically uses existing authenticated sessions
+2. **QR Code Strategy**: Fallback method requiring QR code scanning
+
+#### Configuration Options
+
+```bash
+# WhatsApp session configuration
+WHATSAPP_SESSION_NAME=whatsapp-mcp-session
+WHATSAPP_SESSION_DIR=./whatsapp_session
+WHATSAPP_SESSION_PREFIX=session-
+WHATSAPP_AUTH_TIMEOUT_MS=30000
+WHATSAPP_QR_TIMEOUT_MS=60000
+WHATSAPP_MAX_RETRIES=3
+WHATSAPP_RETRY_DELAY_MS=5000
+```
+
+#### Authentication Flow
+
+The system automatically:
+1. **Detects** existing sessions and validates them
+2. **Selects** the optimal authentication strategy
+3. **Monitors** authentication state with real-time updates
+4. **Provides** detailed error messages with recovery suggestions
+5. **Maintains** session persistence across restarts
+
+#### Auth State Monitoring
+
+You can monitor authentication states:
+
+- `UNINITIALIZED`: Client not yet started
+- `INITIALIZING`: Client starting up
+- `WAITING_FOR_QR`: QR code required for authentication
+- `AUTHENTICATING`: Authentication in progress
+- `AUTHENTICATED`: Successfully authenticated
+- `READY`: Client ready for use
+- `FAILED`: Authentication failed
+- `DISCONNECTED`: Client disconnected
+- `DESTROYED`: Client destroyed/cleaned up
 
 ## Usage
 
@@ -130,12 +209,15 @@ Or if installed locally:
 
 ## Available Tools
 
-### `initialize_whatsapp`
-Initialize the WhatsApp client and authenticate via QR code.
+### `get_whatsapp_status`
+Get current WhatsApp client connection and authentication status.
 
-**Parameters:**
-- `sessionName` (optional): Name for the WhatsApp session
-- `authTimeoutMs` (optional): Authentication timeout in milliseconds
+**Returns:**
+- Connection status, authentication state, session name, phone number
+- Auth state information and error details if any
+- Timestamp of last connection
+
+**Note**: Authentication now happens automatically when any WhatsApp operation is attempted. No manual initialization required!
 
 ### `send_text_message`
 Send a text message to a WhatsApp contact or group.
@@ -235,28 +317,53 @@ If you have an ElevenLabs API key:
 
 ## Troubleshooting
 
-### WhatsApp Authentication Issues
+### Authentication System
 
-1. Make sure your phone has internet connection
-2. QR codes expire after 60 seconds - scan quickly
-3. Only one WhatsApp Web session can be active at a time
-4. Clear session data if authentication persistently fails:
+The new authentication system provides detailed error messages with recovery suggestions:
+
+#### Common Auth Errors
+
+- **`SESSION_NOT_FOUND`**: Run `npm run auth` to create a new session
+- **`SESSION_EXPIRED`**: Run `npm run auth` to re-authenticate with QR code  
+- **`QR_CODE_REQUIRED`**: Run `npm run auth` and scan the displayed QR code
+- **`INITIALIZATION_TIMEOUT`**: Check network connection or increase timeout
+- **`AUTHENTICATION_FAILED`**: Clear session data and re-authenticate
+
+#### Auth Recovery Steps
+
+1. **Check auth status:**
    ```bash
-   rm -rf ./whatsapp_session
+   # The system will show detailed status information
+   # including current state and suggested actions
    ```
 
-### Audio Issues
+2. **Clear problematic sessions:**
+   ```bash
+   rm -rf ./whatsapp_session
+   npm run auth
+   ```
+
+3. **Use environment variables for custom configuration:**
+   ```bash
+   export WHATSAPP_AUTH_TIMEOUT_MS=60000
+   export WHATSAPP_SESSION_DIR=/custom/path
+   ```
+
+For detailed authentication troubleshooting, see [AUTHENTICATION.md](docs/AUTHENTICATION.md).
+
+### Legacy Issues
+
+#### Audio Issues
 
 1. Check that audio files exist and are readable
 2. Supported formats: MP3, WAV, OGG, M4A
 3. For system TTS on macOS, ensure `say` command works
 4. Install ffmpeg for audio format conversion
 
-### Common Errors
+#### Other Common Errors
 
-- **"WhatsApp client not initialized"**: Run `initialize_whatsapp` tool first
-- **"Authentication failed"**: Clear session data and re-authenticate
 - **"TTS generation failed"**: Check ElevenLabs API key or system TTS availability
+- **"Client not ready"**: Wait for authentication to complete automatically
 
 ## Development
 
