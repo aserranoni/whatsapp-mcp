@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: 🧹 Handle stale issues
-        uses: actions/stale@v9
+        uses: actions/stale@v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -112,7 +112,7 @@ jobs:
 
     steps:
       - name: 🧹 Handle stale pull requests
-        uses: actions/stale@v9
+        uses: actions/stale@v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -199,7 +199,7 @@ jobs:
 
     steps:
       - name: 📊 Generate cleanup summary
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const isDryRun = ${{ github.event.inputs.dry_run == 'true' }};
@@ -276,7 +276,7 @@ jobs:
 
     steps:
       - name: 🔄 Reopen if commented on closed stale item
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const issue = context.payload.issue;
